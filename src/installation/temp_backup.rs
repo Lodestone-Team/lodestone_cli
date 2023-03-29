@@ -3,7 +3,6 @@ use std::io::Error;
 use std::path::Path;
 
 pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
-    println!("Copying {:?} to {:?}", source, destination,);
     // create the destination directory if it doesn't exist
     if !destination.exists() {
         fs::create_dir_all(destination)?;
