@@ -3,10 +3,7 @@ use std::io::Error;
 use std::path::Path;
 
 pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
-    // create the destination directory if it doesn't exist
-    if !destination.exists() {
-        fs::create_dir_all(destination)?;
-    }
+    fs::create_dir_all(destination)?;
     for entry in fs::read_dir(&source)? {
         let entry = entry?;
         let path = entry.path();
@@ -29,8 +26,6 @@ pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
 }
 
 pub fn load_backup(backup_path: &Path, current_path: &Path) -> Result<(), Error> {
-    // let backup_path = Path::new(".core_backup");
-    // let current_path = Path::new(".");
     if backup_path.exists() {
         println!("Loading backup");
         copy_dir(backup_path, current_path)?;

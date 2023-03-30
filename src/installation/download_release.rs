@@ -1,60 +1,70 @@
 use super::temp_backup::{copy_dir, load_backup};
 use dirs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::thread::{self};
+use std::process::Command;
 use std::{env, fs};
-
-use std::time::Duration;
-use wait_timeout::ChildExt;
 
 fn get_path() -> PathBuf {
     let home_dir = dirs::home_dir().unwrap();
     println!("Home directory: {:?}", home_dir);
     let lodestone_path = match env::var("LODESTONE_PATH") {
         Ok(val) => PathBuf::from(val),
-        Err(_) => home_dir.join(PathBuf::from(".lodestone_launcher")),
+        Err(_) => home_dir.join(PathBuf::from(".lodestone")),
     };
     println!("Lodestone path: {:?}", lodestone_path);
     return lodestone_path;
 }
-
-fn download_and_run_asset(
-    asset_url: &str,
-    exe_path: &str,
-) -> Result<i32, Box<dyn std::error::Error>> {
+fn download_asset(asset_url: &str, exe_name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
     let response = reqwest::blocking::get(asset_url)?;
     let bytes = response.bytes()?;
 
     let lodestone_dir = get_path();
     std::fs::create_dir_all(&lodestone_dir)?;
 
-    let exe_path = lodestone_dir.join(&exe_path);
+    let exe_path = lodestone_dir.join(&exe_name);
     println!("Exe path: {:?}", exe_path);
 
     fs::write(&exe_path, &bytes)?;
     println!("file written");
-    // run the downloaded executable file
 
-    println!("Running executable file...");
-    let mut command = Command::new(&exe_path);
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command.spawn()?;
+    Ok(exe_path)
+}
+fn run_asset(exe_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+    println!(
+        "Running lodestone core at {}...",
+        &exe_path.to_str().unwrap()
+    );
+    let _command = Command::new(exe_path).spawn();
 
-    let timeout = Duration::from_secs(30);
-    let status_code = match child.wait_timeout(timeout).unwrap() {
-        Some(status) => status.code(),
-        None => {
-            // child hasn't exited yet
-            println!("Child process timed out, killing it");
-            child.kill().unwrap();
-            child.wait().unwrap().code()
-        }
+    Ok(())
+}
+
+fn get_release_url_and_exe_path(
+    version: &str,
+) -> Result<(String, String), Box<dyn std::error::Error>> {
+    // Get the target architecture and operating system
+    let target_arch = env::consts::ARCH;
+    let target_os = env::consts::OS;
+
+    // Choose the appropriate asset filename based on the target architecture and operating system
+    let asset_url = match (target_arch, target_os) {
+    ("x86_64", "windows") => format!(
+        "https://github.com/Lodestone-Team/lodestone_core/releases/download/{}/lodestone_core_windows_{}.exe", version, version),
+    ("arm", "linux") => format!(
+        "https://github.com/Lodestone-Team/lodestone_core/releases/download/{}/lodestone_core_arm_{}.exe", version, version),
+    ("x86", "linux") => format!(
+        "https://github.com/Lodestone-Team/lodestone_core/releases/download/{}/lodestone_core_{}.exe", version, version),
+    _ => return Err("Unsupported target system".into()),
+}   ;
+
+    let exe_path = match (target_arch, target_os) {
+        ("x86_64", "windows") => format!("lodestone_core_windows_{}.exe", version),
+        ("arm", "linux") => format!("lodestone_core_arm_{}.exe", version),
+        ("x86", "linux") => format!("lodestone_core_{}.exe", version),
+        _ => return Err("Unsupported target system".into()),
     };
-    println!("Status code: {:?}", status_code.unwrap());
 
-    Ok(1)
+    Ok((asset_url, exe_path))
 }
 
 pub fn download_release(version: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -65,35 +75,11 @@ pub fn download_release(version: &str) -> Result<(), Box<dyn std::error::Error>>
         std::process::exit(1);
     });
 
-    // Get the target architecture and operating system
-    let target_arch = env::consts::ARCH;
-    let target_os = env::consts::OS;
-
-    // Choose the appropriate asset filename based on the target architecture and operating system
-    let asset_url = match (target_arch, target_os) {
-        ("x86_64", "windows") => format!(
-            "https://github.com/Lodestone-Team/lodestone_core/releases/download/{}/lodestone_core_windows_{}.exe", version, version),
-        ("arm", "linux") => format!(
-            "https://github.com/Lodestone-Team/lodestone_core/releases/download/{}/lodestone_core_arm_{}.exe", version, version),
-        ("x86", "linux") => format!(
-            "https://github.com/Lodestone-Team/lodestone_core/releases/download/{}/lodestone_core_{}.exe", version, version),
-        _ => return Err("Unsupported target system".into()),
-    };
-
-    let exe_path = match (target_arch, target_os) {
-        ("x86_64", "windows") => format!("lodestone_core_windows_{}.exe", version),
-        ("arm", "linux") => format!("lodestone_core_arm_{}.exe", version),
-        ("x86", "linux") => format!("lodestone_core_{}.exe", version),
-        _ => return Err("Unsupported target system".into()),
-    };
-
-    let result = download_and_run_asset(&asset_url, &exe_path);
+    let (asset_url, exe_path) = get_release_url_and_exe_path(&version)?;
+    let exe_path = download_asset(&asset_url, &exe_path)?;
+    let result = run_asset(&exe_path);
     if let Err(e) = result {
-        eprintln!("Failed to download and run asset: {}", e);
-        recover_backup(&dest_dir, &lodestone_dir);
-        std::process::exit(1);
-    } else if result.unwrap_or_default() != 0 {
-        eprintln!("Failed to download and run asset");
+        eprintln!("Error in running lodestone core: {}", e);
         recover_backup(&dest_dir, &lodestone_dir);
         std::process::exit(1);
     }

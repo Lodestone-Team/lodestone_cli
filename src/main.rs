@@ -1,6 +1,5 @@
 use chrono::prelude::*;
 use std::path::Path;
-
 mod version_handler;
 use version_handler::get_latest_version::get_latest_release;
 use version_handler::metadata_handler::update_metadata;

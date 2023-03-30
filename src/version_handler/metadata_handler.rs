@@ -15,22 +15,23 @@ pub fn read_metadata() -> Metadata {
     let path = Path::new("metadata.json");
     let mut contents = String::new();
 
-    if let Err(e) = File::open(path) {
-        println!("Error opening metadata file: {}", e);
-    } else {
-        let mut file = File::open(path).unwrap();
-        if let Err(e) = file.read_to_string(&mut contents) {
-            println!("Error reading metadata file: {}", e);
+    match File::open(path) {
+        Ok(mut file) => {
+            if let Err(e) = file.read_to_string(&mut contents) {
+                println!("Error reading metadata file: {}", e);
+            }
+        }
+        Err(e) => {
+            println!("Error opening metadata file: {}", e);
         }
     }
-
     let metadata = match serde_json::from_str(&contents) {
         Ok(m) => m,
         Err(e) => {
             println!("Error parsing metadata file: {}", e);
             Metadata {
-                current_version: "".to_string(),
-                last_updated: "".to_string(),
+                current_version: "0.0.0".to_string(),
+                last_updated: "N/A".to_string(),
             }
         }
     };
