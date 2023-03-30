@@ -1,8 +1,21 @@
 use std::fs;
 use std::io::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use crate::update_launcher::download_release::get_path;
+
+pub fn recover_backup() {
+    let lodestone_dir = get_path();
+    let dest_dir = lodestone_dir.join(PathBuf::from(".core_backup"));
+    // println!("Copying {:?} to {:?}", dest_dir, lodestone_dir);
+    match load_backup(&dest_dir, &lodestone_dir) {
+        Ok(_) => println!("Backup loaded"),
+        Err(e) => eprintln!("Failed to load backup: {}", e),
+    }
+}
 
 pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
+    println!("Copying {:?} to {:?}", source, destination);
     fs::create_dir_all(destination)?;
     for entry in fs::read_dir(&source)? {
         let entry = entry?;
