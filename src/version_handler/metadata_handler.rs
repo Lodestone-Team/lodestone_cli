@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json;
+use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::io::{self, Write};
@@ -41,7 +42,7 @@ pub fn read_metadata() -> Metadata {
 }
 
 pub fn update_metadata(metadata: &Metadata) -> Result<(), io::Error> {
-    let mut file = File::create("metadata.json")?;
+    let mut file = File::create("src/metadata.json")?;
     let json = serde_json::to_string(metadata)?;
     file.write_all(json.as_bytes())?;
     Ok(())

@@ -1,8 +1,7 @@
-use std::fs;
+use crate::update_launcher::download_release::get_path;
+use std::fs::{self, DirEntry};
 use std::io::Error;
 use std::path::{Path, PathBuf};
-
-use crate::update_launcher::download_release::get_path;
 
 pub fn recover_backup() {
     let lodestone_dir = get_path();
@@ -19,6 +18,9 @@ pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
     fs::create_dir_all(destination)?;
     for entry in fs::read_dir(&source)? {
         let entry = entry?;
+        if is_exe_file(&entry) {
+            continue;
+        }
         let path = entry.path();
         let file_name = path.file_name().unwrap().to_string_lossy().into_owned(); //unlikely to fail
         if file_name == ".core_backup" {
@@ -45,4 +47,13 @@ pub fn load_backup(backup_path: &Path, current_path: &Path) -> Result<(), Error>
         fs::remove_dir_all(backup_path)?;
     }
     Ok(())
+}
+
+fn is_exe_file(entry: &DirEntry) -> bool {
+    if let Some(extension) = entry.path().extension() {
+        if extension == "exe" && entry.path().is_file() {
+            return true;
+        }
+    }
+    false
 }
