@@ -1,17 +1,17 @@
-use super::manage_backup::{copy_dir, load_backup};
+use super::manage_backup::copy_dir;
 use dirs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 use std::{env, fs};
+use tracing::{error, info};
 
 pub fn get_path() -> PathBuf {
     let home_dir = dirs::home_dir().unwrap();
-    println!("Home directory: {:?}", home_dir);
+    info!("Home directory: {:?}", home_dir);
     let lodestone_path = match env::var("LODESTONE_PATH") {
         Ok(val) => PathBuf::from(val),
         Err(_) => home_dir.join(PathBuf::from(".lodestone")),
     };
-    println!("Lodestone path: {:?}", lodestone_path);
+    info!("Lodestone path: {:?}", lodestone_path);
     return lodestone_path;
 }
 
@@ -23,10 +23,8 @@ fn download_asset(asset_url: &str, exe_name: &str) -> Result<PathBuf, Box<dyn st
     std::fs::create_dir_all(&lodestone_dir)?;
 
     let exe_path = lodestone_dir.join(&exe_name);
-    println!("Exe path: {:?}", exe_path);
-
     fs::write(&exe_path, &bytes)?;
-    println!("file written");
+    info!("File written at path: {:?}", &exe_path);
 
     Ok(exe_path)
 }
@@ -63,7 +61,7 @@ pub fn download_release(version: &str) -> Result<(PathBuf, String), Box<dyn std:
     let lodestone_dir = get_path();
     let dest_dir = lodestone_dir.join(PathBuf::from(".core_backup"));
     copy_dir(&lodestone_dir, &dest_dir).unwrap_or_else(|e| {
-        eprintln!("Failed to copy directory: {}", e);
+        error!("Failed to copy directory: {}", e);
         std::process::exit(1);
     });
 

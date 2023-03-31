@@ -1,9 +1,10 @@
 use ctrlc::set_handler;
 use std::sync::{Arc, Mutex};
 use std::{path::PathBuf, process::Command};
+use tracing::{debug, error, info};
 
 pub fn run_asset(exe_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    println!(
+    info!(
         "Running lodestone core at {}...",
         &exe_path.to_str().unwrap()
     );
@@ -15,19 +16,19 @@ pub fn run_asset(exe_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let process = Arc::new(Mutex::new(process));
     let signal_process = process.clone();
     match set_handler(move || {
-        println!("Killing lodestone core...");
+        info!("Killing lodestone core...");
         let _ = signal_process.lock().unwrap().kill(); //unlikely to fail
     }) {
         Ok(_) => {}
         Err(e) => {
-            println!("Error setting up signal handler: {}", e);
+            error!("Error setting up signal handler: {}", e);
         }
     }
 
     // Wait for the process to terminate
     let status = process.lock().unwrap().wait()?;
     if !status.success() {
-        eprintln!("Process exited with status code: {}", status);
+        error!("Process exited with status code: {}", status);
     }
 
     Ok(())

@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::Read;
 use std::io::{self, Write};
 use std::path::Path;
-
+use tracing::error;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Metadata {
     pub current_version: String,
@@ -19,17 +19,17 @@ pub fn read_metadata(path: &Path) -> Metadata {
     match File::open(path) {
         Ok(mut file) => {
             if let Err(e) = file.read_to_string(&mut contents) {
-                println!("Error reading metadata file: {}", e);
+                error!("Error reading metadata file: {}", e);
             }
         }
         Err(e) => {
-            println!("Error opening metadata file: {}", e);
+            error!("Error opening metadata file: {}", e);
         }
     }
     let metadata = match serde_json::from_str(&contents) {
         Ok(m) => m,
         Err(e) => {
-            println!("Error parsing metadata file: {}", e);
+            error!("Error parsing metadata file: {}", e);
             Metadata {
                 current_version: "0.0.0".to_string(),
                 last_updated: "N/A".to_string(),

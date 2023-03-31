@@ -1,3 +1,5 @@
+use tracing::{error, info};
+
 use crate::update_launcher::download_release::get_path;
 use std::fs::{self, DirEntry};
 use std::io::Error;
@@ -8,8 +10,8 @@ pub fn recover_backup() {
     let dest_dir = lodestone_dir.join(PathBuf::from(".core_backup"));
     // println!("Copying {:?} to {:?}", dest_dir, lodestone_dir);
     match load_backup(&dest_dir, &lodestone_dir) {
-        Ok(_) => println!("Backup loaded"),
-        Err(e) => eprintln!("Failed to load backup: {}", e),
+        Ok(_) => info!("Backup loaded"),
+        Err(e) => error!("Failed to load backup: {}", e),
     }
 }
 
@@ -42,7 +44,7 @@ pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
 
 pub fn load_backup(backup_path: &Path, current_path: &Path) -> Result<(), Error> {
     if backup_path.exists() {
-        println!("Loading backup");
+        info!("Loading backup");
         copy_dir(backup_path, current_path)?;
         fs::remove_dir_all(backup_path)?;
     }

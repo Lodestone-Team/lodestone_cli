@@ -12,12 +12,16 @@ mod update_launcher;
 use update_launcher::download_release::{download_release, get_path};
 
 use crate::update_launcher::manage_backup::recover_backup;
+use tracing::{debug, error, info};
 
-use std::env;
-use tracing::{debug, error, info, Level};
 pub fn update(release_version: &str) -> PathBuf {
-    let (exe_path, exe_file) =
-        download_release(release_version).expect("Failed to download latest release");
+    let (exe_path, exe_file) = match download_release(release_version) {
+        Ok((p, f)) => (p, f),
+        Err(e) => {
+            error!("Failed to download latest release: {}", e);
+            return PathBuf::from("");
+        }
+    };
 
     let new_metadata = Metadata {
         current_version: release_version.to_string(),
@@ -26,7 +30,7 @@ pub fn update(release_version: &str) -> PathBuf {
     };
 
     match update_metadata(&new_metadata) {
-        Ok(_) => info!("Metadata updated: {:?}", new_metadata),
+        Ok(_) => debug!("Metadata updated: {:?}", new_metadata),
         Err(e) => error!("Error updating metadata: {}", e),
     }
 

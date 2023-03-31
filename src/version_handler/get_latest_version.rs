@@ -1,3 +1,5 @@
+use tracing::info;
+
 #[derive(serde::Deserialize)]
 struct Release {
     tag_name: String,
@@ -14,6 +16,6 @@ pub fn get_latest_release() -> Result<String, anyhow::Error> {
 
     let release: Release = response.json()?;
     let latest_version = release.tag_name;
-    println!("Latest version: {}", latest_version);
+    info!("Latest version: {}", latest_version);
     Ok(latest_version)
 }
