@@ -13,8 +13,7 @@ pub struct Metadata {
     pub installer_exe: String,
 }
 
-pub fn read_metadata() -> Metadata {
-    let path = Path::new("metadata.json");
+pub fn read_metadata(path: &Path) -> Metadata {
     let mut contents = String::new();
 
     match File::open(path) {

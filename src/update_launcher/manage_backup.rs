@@ -14,7 +14,7 @@ pub fn recover_backup() {
 }
 
 pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
-    println!("Copying {:?} to {:?}", source, destination);
+    // println!("Copying {:?} to {:?}", source, destination);
     fs::create_dir_all(destination)?;
     for entry in fs::read_dir(&source)? {
         let entry = entry?;
