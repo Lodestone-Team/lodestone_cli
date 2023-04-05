@@ -26,3 +26,4 @@ tracing-subscriber = { version = "0.3.16", features = [
     "time",
 ] }
 tracing-error = "0.2.0"
+semver = {version = "1.0.17", features = ["serde"]}
