@@ -10,7 +10,7 @@ use tracing::error;
 pub struct Metadata {
     pub current_version: String,
     pub last_updated: String,
-    pub installer_exe: String,
+    pub executable_name: String,
 }
 
 pub fn read_metadata(path: &Path) -> Metadata {
@@ -33,7 +33,7 @@ pub fn read_metadata(path: &Path) -> Metadata {
             Metadata {
                 current_version: "0.0.0".to_string(),
                 last_updated: "N/A".to_string(),
-                installer_exe: "N/A".to_string(),
+                executable_name: "N/A".to_string(),
             }
         }
     };

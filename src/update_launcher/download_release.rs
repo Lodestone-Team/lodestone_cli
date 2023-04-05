@@ -30,37 +30,37 @@ fn download_asset(asset_url: &str, exe_name: &str) -> Result<PathBuf> {
     Ok(exe_path)
 }
 
-fn get_release_url_and_file_name(version: &str) -> Result<(String, String)> {
+fn get_release_url_and_executable_name(version: &str) -> Result<(String, String)> {
     // Get the target architecture and operating system
     let target_arch = env::consts::ARCH;
     let target_os = env::consts::OS;
-    let github_release_url = "https://github.com/Lodestone-Team/lodestone_core/releases/download/";
+    let github_repo_url = "https://github.com/Lodestone-Team/lodestone_core/";
+
+    let executable_name: String = match (target_arch, target_os) {
+        ("x86_64", "windows") => format!("lodestone_core_windows_{}.exe", version),
+        ("aarch64", "linux") => format!("lodestone_core_arm_{}", version),
+        ("x86", "linux") => format!("lodestone_core_{}", version),
+        _ => return Err(eyre!("Unsupported target system")),
+    };
 
     // Choose the appropriate asset filename based on the target architecture and operating system
     let asset_url = match (target_arch, target_os) {
         ("x86_64", "windows") => format!(
-            "{}{}/lodestone_core_windows_{}.exe",
-            github_release_url, version, version
+            "{}releases/download/{}/{}",
+            github_repo_url, version, executable_name
         ),
-        ("arm", "linux") => format!(
-            "{}{}/lodestone_core_arm_{}.exe",
-            github_release_url, version, version
+        ("aarch64", "linux") => format!(
+            "{}releases/download/{}/{}",
+            github_repo_url, version, executable_name
         ),
         ("x86", "linux") => format!(
-            "{}{}/lodestone_core_{}.exe",
-            github_release_url, version, version
+            "{}releases/download/{}/{}",
+            github_repo_url, version, executable_name
         ),
         _ => return Err(eyre!("Unsupported target system")),
     };
 
-    let file_name: String = match (target_arch, target_os) {
-        ("x86_64", "windows") => format!("lodestone_core_windows_{}.exe", version),
-        ("arm", "linux") => format!("lodestone_core_arm_{}.exe", version),
-        ("x86", "linux") => format!("lodestone_core_{}.exe", version),
-        _ => return Err(eyre!("Unsupported target system")),
-    };
-
-    Ok((asset_url, file_name))
+    Ok((asset_url, executable_name))
 }
 
 pub fn download_release(version: &str) -> Result<(PathBuf, String)> {
@@ -69,8 +69,8 @@ pub fn download_release(version: &str) -> Result<(PathBuf, String)> {
     let dest_dir = lodestone_path.join(PathBuf::from(".core_backup"));
     copy_dir(&lodestone_path, &dest_dir)?;
 
-    let (asset_url, file_name) = get_release_url_and_file_name(&version)?;
-    let exe_path = download_asset(&asset_url, &file_name)?;
+    let (asset_url, executable_name) = get_release_url_and_executable_name(&version)?;
+    let exe_path = download_asset(&asset_url, &executable_name)?;
 
-    Ok((exe_path, file_name))
+    Ok((exe_path, executable_name))
 }

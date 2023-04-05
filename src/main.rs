@@ -26,7 +26,7 @@ pub fn update(release_version: &str) -> PathBuf {
     let new_metadata = Metadata {
         current_version: release_version.to_string(),
         last_updated: Utc::now().to_string(),
-        installer_exe: exe_file,
+        executable_name: exe_file,
     };
 
     match update_metadata(&new_metadata) {
@@ -62,7 +62,7 @@ async fn main() {
         }
     };
 
-    // let exe_path = get_path().join(metadata.installer_exe);
+    // let exe_path = get_path().join(metadata.executable_name);
 
     let exe_path: PathBuf = if !metadata_file.exists() {
         info!("No metadata file found, downloading latest release");
@@ -75,7 +75,7 @@ async fn main() {
             update(&release_version)
         } else {
             info!("No update needed");
-            get_lodestone_path().join(metadata.installer_exe)
+            get_lodestone_path().join(metadata.executable_name)
         }
     };
 
