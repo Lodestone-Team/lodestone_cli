@@ -20,4 +20,5 @@ async fn main() {
     let executable_path = update_manager::try_update().await.unwrap();
     run_lodestone(&executable_path).unwrap();
     // TODO: implement backup and recovering from crashes
+    // TODO: write logs to a file
 }
