@@ -54,7 +54,7 @@ async fn main() {
     }
 
     let metadata_file = Path::new("src/metadata.json");
-    let release_version = match get_latest_release() {
+    let release_version = match get_latest_release().await {
         Ok(v) => v,
         Err(e) => {
             error!("Error: {}", e);
@@ -83,6 +83,5 @@ async fn main() {
     if let Err(e) = result {
         error!("Error in running lodestone core: {}", e);
         recover_backup();
-        std::process::exit(1);
     };
 }
