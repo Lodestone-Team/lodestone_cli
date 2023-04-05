@@ -1,11 +1,11 @@
+use color_eyre::eyre::Result;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use std::env;
 use std::fs::File;
-use std::io::Read;
-use std::io::{self, Write};
+use std::io::{Read, Write};
 use std::path::Path;
 use tracing::error;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Metadata {
     pub current_version: String,
@@ -40,7 +40,7 @@ pub fn read_metadata(path: &Path) -> Metadata {
     return metadata;
 }
 
-pub fn update_metadata(metadata: &Metadata) -> Result<(), io::Error> {
+pub fn update_metadata(metadata: &Metadata) -> Result<()> {
     let mut file = File::create("src/metadata.json")?;
     let json = serde_json::to_string(metadata)?;
     file.write_all(json.as_bytes())?;

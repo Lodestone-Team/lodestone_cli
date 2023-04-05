@@ -9,7 +9,7 @@ use version_handler::metadata_handler::update_metadata;
 use version_handler::metadata_handler::{read_metadata, Metadata};
 
 mod update_launcher;
-use update_launcher::download_release::{download_release, get_path};
+use update_launcher::download_release::{download_release, get_lodestone_path};
 
 use crate::update_launcher::manage_backup::recover_backup;
 use tracing::{debug, error, info};
@@ -38,7 +38,9 @@ pub fn update(release_version: &str) -> PathBuf {
     return exe_path;
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    color_eyre::install().unwrap();
     // env::set_var("RUST_LOG", "warn");
     let env_filter = EnvFilter::from_default_env()
         .add_directive(tracing::level_filters::LevelFilter::INFO.into());
@@ -73,7 +75,7 @@ fn main() {
             update(&release_version)
         } else {
             info!("No update needed");
-            get_path().join(metadata.installer_exe)
+            get_lodestone_path().join(metadata.installer_exe)
         }
     };
 
@@ -82,5 +84,5 @@ fn main() {
         error!("Error in running lodestone core: {}", e);
         recover_backup();
         std::process::exit(1);
-    }
+    };
 }

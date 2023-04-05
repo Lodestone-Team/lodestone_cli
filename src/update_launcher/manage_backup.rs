@@ -1,12 +1,11 @@
+use crate::update_launcher::download_release::get_lodestone_path;
+use color_eyre::eyre::Result;
+use std::fs::{self, DirEntry};
+use std::path::{Path, PathBuf};
 use tracing::{error, info};
 
-use crate::update_launcher::download_release::get_path;
-use std::fs::{self, DirEntry};
-use std::io::Error;
-use std::path::{Path, PathBuf};
-
 pub fn recover_backup() {
-    let lodestone_dir = get_path();
+    let lodestone_dir = get_lodestone_path();
     let dest_dir = lodestone_dir.join(PathBuf::from(".core_backup"));
     // println!("Copying {:?} to {:?}", dest_dir, lodestone_dir);
     match load_backup(&dest_dir, &lodestone_dir) {
@@ -15,7 +14,7 @@ pub fn recover_backup() {
     }
 }
 
-pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
+pub fn copy_dir(source: &Path, destination: &Path) -> Result<()> {
     // println!("Copying {:?} to {:?}", source, destination);
     fs::create_dir_all(destination)?;
     for entry in fs::read_dir(&source)? {
@@ -42,7 +41,7 @@ pub fn copy_dir(source: &Path, destination: &Path) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn load_backup(backup_path: &Path, current_path: &Path) -> Result<(), Error> {
+pub fn load_backup(backup_path: &Path, current_path: &Path) -> Result<()> {
     if backup_path.exists() {
         info!("Loading backup");
         copy_dir(backup_path, current_path)?;
