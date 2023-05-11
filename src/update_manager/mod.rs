@@ -1,5 +1,6 @@
 use chrono::Utc;
-use color_eyre::eyre::Result;
+use color_eyre::{eyre::Result, owo_colors::OwoColorize};
+use semver::Version;
 use std::path::{Path, PathBuf};
 
 use tracing::{info, warn};
@@ -11,8 +12,15 @@ use crate::{update_manager::download::download_release, util};
 
 /// Updates the lodestone core to the latest release if needed
 /// Returns the path to the new (or old) executable
-pub async fn try_update(lodestone_path: &Path) -> Result<PathBuf> {
-    let latest_version = versions::get_latest_release().await?;
+pub async fn try_update(
+    lodestone_path: &Path,
+    version_override: Option<Version>,
+) -> Result<Option<PathBuf>> {
+    let new_version = if let Some(ref v) = version_override {
+        v.clone()
+    } else {
+        versions::get_latest_release().await?
+    };
 
     let current_version = match versions::get_current_version().await {
         Ok(v) => Some(v),
@@ -29,61 +37,63 @@ pub async fn try_update(lodestone_path: &Path) -> Result<PathBuf> {
             {
                 info!("If you have lodestone installed to a custom location, please shut down the launcher and set the LODESTONE_PATH environment variable to the path to your lodestone core installation with `export LODESTONE_PATH=<path>`");
             }
-            info!(
-                "Would you like to install lodestone core v{latest_version} to {}? Choosing 'n' will exit the launcher. (y/n)",
-                lodestone_path.display()
-            );
-            let mut answer = String::new();
-            std::io::stdin().read_line(&mut answer)?;
-            if answer.trim() != "y" {
-                info!("User chose not to install");
-                std::process::exit(0);
-            } else {
-                info!("User chose to install");
-                None
-            }
-        }
-    };
-
-    match current_version {
-        Some(current_version) => {
-            info!(
-                "Current version: v{}, Latest version: v{}",
-                current_version, latest_version
-            );
-            if current_version == latest_version {
-                info!("Current version is latest version, skipping update");
-                return Ok(lodestone_path.join(util::get_executable_name(&current_version)?));
-            }
-
-            if current_version > latest_version {
-                warn!("Current version is greater than latest release, skipping update");
-                return Ok(lodestone_path.join(util::get_executable_name(&current_version)?));
-            }
-
-            // Otherwise we need to update
-            // ask the user if they want to update in the terminal
-            let mut answer = String::new();
-            info!("Would you like to update to the latest version? (y/n)");
-            std::io::stdin().read_line(&mut answer)?;
-            if answer.trim() != "y" {
-                info!("User chose not to update");
-                return Ok(lodestone_path.join(util::get_executable_name(&current_version)?));
-            }
-        }
-        None => {
             // if lodestone_path is not empty, exit
             if lodestone_path.read_dir()?.next().is_some() {
-                info!("Path {} is not empty, exiting", lodestone_path.display());
-                std::process::exit(1);
+                info!("Path {} is not empty, this is normal if you ran an older version of lodestone core", lodestone_path.display());
+                info!("Would you like to install lodestone core {} to {}? Choosing 'n' will exit the launcher. (yes/n)", new_version.bold(), lodestone_path.display().bold());
+                warn!("{} Doing so may break your installation of Lodestone Desktop", "If you have Lodestone Desktop, DO NOT INSTALL A DIFFERENT VERSION OF LODESTONE CORE.".bold().yellow());
+                let mut answer = String::new();
+                std::io::stdin().read_line(&mut answer)?;
+                if answer.trim() != "yes" {
+                    info!("User chose not to install");
+                    return Ok(None);
+                }
             }
+            None
         }
     };
+    match version_override {
+        None => {
+            if let Some(current_version) = current_version {
+                info!(
+                    "Current version: {}, new version: {}",
+                    current_version.bold(),
+                    new_version.bold()
+                );
+                if current_version == new_version {
+                    info!("Current version is new version, skipping update");
+                    return Ok(Some(
+                        lodestone_path.join(util::get_executable_name(&current_version)?),
+                    ));
+                }
 
-    let (executable_path, exe_file) = download_release(&latest_version, lodestone_path).await?;
+                if current_version > new_version {
+                    warn!("Current version is greater than new version, skipping update");
+                    return Ok(Some(
+                        lodestone_path.join(util::get_executable_name(&current_version)?),
+                    ));
+                }
+
+                // Otherwise we need to update
+                // ask the user if they want to update in the terminal
+                let mut answer = String::new();
+                info!("Would you like to update to the new version? (y/n)");
+                std::io::stdin().read_line(&mut answer)?;
+                if answer.trim() != "y" {
+                    info!("User chose not to update");
+                    return Ok(Some(
+                        lodestone_path.join(util::get_executable_name(&current_version)?),
+                    ));
+                }
+            }
+        }
+        Some(v) => info!("Version override: {}", v),
+    }
+
+    let (executable_path, exe_file) = download_release(&new_version, lodestone_path).await?;
 
     let new_metadata = metadata::Metadata {
-        current_version: format!("v{}", latest_version),
+        current_version: new_version.clone(),
         last_updated: Utc::now().to_string(), //TODO Standardize this
         executable_name: exe_file,
     };
@@ -92,6 +102,6 @@ pub async fn try_update(lodestone_path: &Path) -> Result<PathBuf> {
         .write_metadata(&lodestone_path.join("metadata.json"))
         .await?;
 
-    info!("Installed lodestone v{}", latest_version);
-    Ok(executable_path)
+    info!("Installed lodestone v{}", new_version);
+    Ok(Some(executable_path))
 }

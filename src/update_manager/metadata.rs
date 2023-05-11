@@ -7,7 +7,7 @@ use tokio::io::AsyncWriteExt;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Metadata {
-    pub current_version: String,
+    pub current_version: semver::Version,
     pub last_updated: String,
     pub executable_name: String,
 }

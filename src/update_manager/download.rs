@@ -10,7 +10,7 @@ fn get_release_url(version: &Version) -> Result<String> {
     let executable_name = util::get_executable_name(version)?;
 
     Ok(format!(
-        "{}releases/download/v{}/{}",
+        "{}releases/download/{}/{}",
         github_repo_url, version, executable_name
     ))
 }
@@ -28,8 +28,8 @@ pub async fn download_release(
     let executable_name = util::get_executable_name(version)?;
     let release_url = get_release_url(version)?;
     let executable_path = lodestone_path.join(&executable_name);
-    std::fs::create_dir_all(lodestone_path)?;
-    util::download_file(&release_url, &executable_path).await?;
+    tokio::fs::create_dir_all(lodestone_path).await?;
+    util::download_file(&release_url, &executable_path, lodestone_path).await?;
 
     Ok((executable_path, executable_name))
 }
