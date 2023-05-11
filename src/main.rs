@@ -46,12 +46,12 @@ fn setup_tracing() {
             .with_thread_ids(false)
             // Don't display the event's target (module path)
             .with_target(false)
-            .with_writer(std::io::stdout)
-            .with_filter(EnvFilter::from("lodestone_launcher=info"));
+            .with_writer(std::io::stdout);
 
         tracing_subscriber::registry()
             // .with(ErrorLayer::default())
             .with(fmt_layer_stdout)
+            .with(EnvFilter::from("lodestone_launcher=info"))
             .init();
     }
 }
