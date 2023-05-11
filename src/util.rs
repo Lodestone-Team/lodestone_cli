@@ -1,22 +1,19 @@
 use color_eyre::eyre::{eyre, Result};
 use semver::Version;
-use std::{env, path::PathBuf};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 use tokio::fs;
 use tracing::debug;
 
-pub fn get_lodestone_path() -> PathBuf {
-    let home_dir = dirs::home_dir().unwrap();
+pub fn get_lodestone_path() -> Option<PathBuf> {
+    let home_dir = dirs::home_dir()?;
 
-    match env::var("LODESTONE_PATH") {
+    Some(match env::var("LODESTONE_PATH") {
         Ok(val) => PathBuf::from(val),
         Err(_) => home_dir.join(PathBuf::from(".lodestone")),
-    }
-}
-
-pub fn get_metadata_path() -> PathBuf {
-    let lodestone_path = get_lodestone_path();
-    lodestone_path.join(PathBuf::from("metadata.json"))
-    // return PathBuf::from("metadata.json");
+    })
 }
 
 pub fn get_executable_name(version: &Version) -> Result<String> {
@@ -40,16 +37,15 @@ pub fn get_executable_name(version: &Version) -> Result<String> {
     Ok(executable_name)
 }
 
-pub async fn download_file(url: &str, file_name: &str) -> Result<PathBuf> {
+pub async fn download_file(url: &str, dest: &Path) -> Result<()> {
     let response = reqwest::get(url).await?;
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     let bytes = response.bytes().await?;
 
-    let lodestone_path = get_lodestone_path();
-    std::fs::create_dir_all(&lodestone_path)?;
+    fs::write(&dest, &bytes).await?;
+    debug!("Downloaded file to path {}", dest.display());
 
-    let executable_path = lodestone_path.join(file_name);
-    fs::write(&executable_path, &bytes).await?;
-    debug!("File written at path: {:?}", &executable_path);
-
-    Ok(executable_path)
+    Ok(())
 }

@@ -1,7 +1,6 @@
 use color_eyre::eyre::Result;
 use semver::Version;
 
-
 use crate::update_manager::metadata::Metadata;
 use crate::util;
 #[derive(serde::Deserialize)]
@@ -25,7 +24,9 @@ pub async fn get_latest_release() -> Result<Version> {
 }
 
 pub async fn get_current_version() -> Result<Version> {
-    let metadata_path = util::get_metadata_path();
+    let metadata_path = util::get_lodestone_path()
+        .ok_or_else(|| color_eyre::eyre::eyre!("Could not find lodestone path"))?
+        .join("metadata.json");
     let metadata = Metadata::read_metadata(&metadata_path).await?;
     let current_version = Version::parse(metadata.current_version.trim_start_matches('v'))?;
     Ok(current_version)

@@ -9,15 +9,18 @@ pub mod metadata;
 pub mod versions;
 use crate::{update_manager::download::download_release, util};
 
-
 /// Updates the lodestone core to the latest release if needed
 /// Returns the path to the new (or old) executable
 pub async fn try_update() -> Result<PathBuf> {
     let latest_version = versions::get_latest_release().await?;
+    let lodestone_path = util::get_lodestone_path().ok_or_else(|| {
+        color_eyre::eyre::eyre!(
+            "Failed to get lodestone path. The LODESTONE_PATH environment variable is not set and we couldn't get your home directory"
+        )
+    })?;
     let current_version = match versions::get_current_version().await {
         Ok(v) => Some(v),
         Err(_e) => {
-            let lodestone_path = util::get_lodestone_path();
             info!(
                 "We couldn't find a lodestone installation under {}",
                 lodestone_path.display()
@@ -45,7 +48,6 @@ pub async fn try_update() -> Result<PathBuf> {
             }
         }
     };
-    let lodestone_path = util::get_lodestone_path();
 
     let current_version = match current_version {
         Some(current_version) => {
@@ -74,10 +76,17 @@ pub async fn try_update() -> Result<PathBuf> {
             }
             current_version
         }
-        None => latest_version.clone(),
+        None => {
+            // if lodestone_path is not empty, exit
+            if lodestone_path.read_dir()?.next().is_some() {
+                info!("Path {} is not empty, exiting", lodestone_path.display());
+                std::process::exit(1);
+            }
+            latest_version.clone()
+        }
     };
 
-    let (executable_path, exe_file) = download_release(&latest_version).await?;
+    let (executable_path, exe_file) = download_release(&latest_version, &lodestone_path).await?;
 
     let new_metadata = metadata::Metadata {
         current_version: format!("v{}", latest_version),
@@ -85,11 +94,10 @@ pub async fn try_update() -> Result<PathBuf> {
         executable_name: exe_file,
     };
 
-    let metadata_path = crate::util::get_metadata_path();
     new_metadata
-        .write_metadata(&lodestone_path.join(metadata_path))
+        .write_metadata(&lodestone_path.join("metadata.json"))
         .await?;
 
-    info!("Updated from {} to {}", current_version, latest_version);
+    info!("Installed lodestone v{}", latest_version);
     Ok(executable_path)
 }
