@@ -19,7 +19,7 @@ impl Metadata {
         file.write_all(json.as_bytes()).await?;
         Ok(())
     }
-    
+
     pub async fn read_metadata(path: &Path) -> Result<Metadata> {
         let contents = fs::read_to_string(path).await?;
         let metadata: Metadata = serde_json::from_str(&contents)?;

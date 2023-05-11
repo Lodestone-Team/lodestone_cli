@@ -9,7 +9,7 @@ pub fn run_lodestone(executable_path: &Path) -> Result<()> {
         "Running lodestone core at {}",
         &executable_path.to_str().unwrap()
     );
-    
+
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

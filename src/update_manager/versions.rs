@@ -1,6 +1,6 @@
 use color_eyre::eyre::Result;
 use semver::Version;
-use tracing::info;
+
 
 use crate::update_manager::metadata::Metadata;
 use crate::util;
@@ -21,7 +21,6 @@ pub async fn get_latest_release() -> Result<Version> {
 
     let release: Release = response.json().await?;
     let latest_version = Version::parse(release.tag_name.trim_start_matches('v'))?;
-    info!("Latest version: {}", latest_version);
     Ok(latest_version)
 }
 
