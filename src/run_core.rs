@@ -1,14 +1,24 @@
+use color_eyre::eyre::Result;
 use ctrlc::set_handler;
 use std::sync::{Arc, Mutex};
-use std::{path::PathBuf, process::Command};
-use tracing::{debug, error, info};
+use std::{path::Path, process::Command};
+use tracing::{error, info};
 
-pub fn run_asset(exe_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_lodestone(executable_path: &Path) -> Result<()> {
     info!(
-        "Running lodestone core at {}...",
-        &exe_path.to_str().unwrap()
+        "Running lodestone core at {}",
+        &executable_path.to_str().unwrap()
     );
-    let process = Command::new(exe_path).spawn()?;
+    
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(executable_path)?.permissions();
+        permissions.set_mode(0o700);
+        std::fs::set_permissions(executable_path, permissions)?;
+    }
+
+    let process = Command::new(executable_path).spawn()?;
 
     // let pid = process.id();
 
@@ -16,7 +26,7 @@ pub fn run_asset(exe_path: &PathBuf) -> Result<(), Box<dyn std::error::Error>> {
     let process = Arc::new(Mutex::new(process));
     let signal_process = process.clone();
     match set_handler(move || {
-        info!("Killing lodestone core...");
+        info!("Killing lodestone core");
         let _ = signal_process.lock().unwrap().kill(); //unlikely to fail
     }) {
         Ok(_) => {}
