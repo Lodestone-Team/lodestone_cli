@@ -1,6 +1,6 @@
 use chrono::Utc;
 use color_eyre::eyre::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tracing::{info, warn};
 
@@ -11,13 +11,9 @@ use crate::{update_manager::download::download_release, util};
 
 /// Updates the lodestone core to the latest release if needed
 /// Returns the path to the new (or old) executable
-pub async fn try_update() -> Result<PathBuf> {
+pub async fn try_update(lodestone_path: &Path) -> Result<PathBuf> {
     let latest_version = versions::get_latest_release().await?;
-    let lodestone_path = util::get_lodestone_path().ok_or_else(|| {
-        color_eyre::eyre::eyre!(
-            "Failed to get lodestone path. The LODESTONE_PATH environment variable is not set and we couldn't get your home directory"
-        )
-    })?;
+
     let current_version = match versions::get_current_version().await {
         Ok(v) => Some(v),
         Err(_e) => {
@@ -27,14 +23,14 @@ pub async fn try_update() -> Result<PathBuf> {
             );
             #[cfg(target_os = "windows")]
             {
-                info!("If you have lodestone installed to a custom location, please restart the updater and set the LODESTONE_PATH environment variable to the path to your lodestone installation with `set LODESTONE_PATH=<path>`");
+                info!("If you have lodestone installed to a custom location, please shut down the launcher and follow the instructions at https://github.com/Lodestone-Team/lodestone/wiki/How-Tos#how-do-i-change-where-lodestone-stores-all-its-data");
             }
             #[cfg(target_os = "linux")]
             {
-                info!("If you have lodestone installed to a custom location, please restart the updater and set the LODESTONE_PATH environment variable to the path to your lodestone installation with `export LODESTONE_PATH=<path>`");
+                info!("If you have lodestone installed to a custom location, please shut down the launcher and set the LODESTONE_PATH environment variable to the path to your lodestone core installation with `export LODESTONE_PATH=<path>`");
             }
             info!(
-                "Would you like to install lodestone v{latest_version} to {}? Choosing 'n' will exit the updater. (y/n)",
+                "Would you like to install lodestone core v{latest_version} to {}? Choosing 'n' will exit the launcher. (y/n)",
                 lodestone_path.display()
             );
             let mut answer = String::new();
@@ -49,7 +45,7 @@ pub async fn try_update() -> Result<PathBuf> {
         }
     };
 
-    let current_version = match current_version {
+    match current_version {
         Some(current_version) => {
             info!(
                 "Current version: v{}, Latest version: v{}",
@@ -74,7 +70,6 @@ pub async fn try_update() -> Result<PathBuf> {
                 info!("User chose not to update");
                 return Ok(lodestone_path.join(util::get_executable_name(&current_version)?));
             }
-            current_version
         }
         None => {
             // if lodestone_path is not empty, exit
@@ -82,11 +77,10 @@ pub async fn try_update() -> Result<PathBuf> {
                 info!("Path {} is not empty, exiting", lodestone_path.display());
                 std::process::exit(1);
             }
-            latest_version.clone()
         }
     };
 
-    let (executable_path, exe_file) = download_release(&latest_version, &lodestone_path).await?;
+    let (executable_path, exe_file) = download_release(&latest_version, lodestone_path).await?;
 
     let new_metadata = metadata::Metadata {
         current_version: format!("v{}", latest_version),
