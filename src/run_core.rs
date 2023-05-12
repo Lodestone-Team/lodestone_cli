@@ -3,7 +3,6 @@ use ctrlc::set_handler;
 use std::sync::{Arc, Mutex};
 use std::{path::Path, process::Command};
 
-
 pub fn run_lodestone(executable_path: &Path) -> Result<()> {
     println!("Running lodestone core at {}", &executable_path.display());
 
