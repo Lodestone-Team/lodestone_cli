@@ -99,7 +99,7 @@ pub async fn try_update(
     };
 
     new_metadata
-        .write_metadata(&lodestone_path.join("metadata.json"))
+        .write_metadata(&lodestone_path.join(".lodestone_launcher_metadata.json"))
         .await?;
 
     info!("Installed lodestone v{}", new_version);

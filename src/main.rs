@@ -20,7 +20,7 @@ use crate::update_manager::versions::get_current_version;
 
 /// A simple CLI tool to install, update and run the lodestone core
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, about, long_about = None)]
 struct Args {
     /// Uninstall lodestone
     #[clap(long)]
@@ -106,7 +106,7 @@ async fn main() {
             if current_version > *v {
                 warn!(
                     "You are installing an older version of lodestone ({}) than the one you currently have installed ({})",
-                    v, current_version
+                    v.bold(), current_version.bold()
                 );
                 info!(
                     "Note that {}",
