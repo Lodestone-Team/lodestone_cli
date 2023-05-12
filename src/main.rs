@@ -1,15 +1,12 @@
 mod uninstall;
 mod util;
 
-use std::{fmt::Display, path::PathBuf};
+use std::{fmt::Display, io::Write, path::PathBuf};
 
 use color_eyre::owo_colors::OwoColorize;
 use semver::Version;
-use tracing::{error, info, warn};
 
-use tracing_subscriber::{
-    prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, EnvFilter,
-};
+
 mod run_core;
 mod update_manager;
 use run_core::run_lodestone;
@@ -35,56 +32,10 @@ struct Args {
     pub yes_all: bool,
 }
 
-fn setup_tracing() {
-    // set up a subscriber that logs formatted tracing events to stdout without colors without setting it as the default
-
-    #[cfg(debug_assertions)]
-    {
-        let fmt_layer_stdout = tracing_subscriber::fmt::layer()
-            // Use a more compact, abbreviated log format
-            .compact()
-            // Display source code file paths
-            .with_file(true)
-            // Display source code line numbers
-            .with_line_number(true)
-            // Display the thread ID an event was recorded on
-            .with_thread_ids(false)
-            // Don't display the event's target (module path)
-            .with_target(true)
-            .with_writer(std::io::stdout);
-
-        tracing_subscriber::registry()
-            .with(fmt_layer_stdout)
-            .with(EnvFilter::from("lodestone_launcher=debug"))
-            .init();
-    }
-
-    #[cfg(not(debug_assertions))]
-    {
-        let fmt_layer_stdout = tracing_subscriber::fmt::layer()
-            // Use a more compact, abbreviated log format
-            .compact()
-            // Display source code file paths
-            .with_file(false)
-            // Display source code line numbers
-            .with_line_number(false)
-            // Display the thread ID an event was recorded on
-            .with_thread_ids(false)
-            // Don't display the event's target (module path)
-            .with_target(false)
-            .without_time()
-            .with_writer(std::io::stdout);
-
-        tracing_subscriber::registry()
-            // .with(ErrorLayer::default())
-            .with(fmt_layer_stdout)
-            .with(EnvFilter::from("lodestone_launcher=info"))
-            .init();
-    }
-}
 
 fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String) -> bool) -> bool {
-    info!("{message}");
+    print!("{message}");
+    std::io::stdout().flush().unwrap();
     let mut input = String::new();
     std::io::stdin()
         .read_line(&mut input)
@@ -94,57 +45,65 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
 
 #[tokio::main]
 async fn main() {
-    setup_tracing();
+    // setup_tracing();
     let args = Args::parse();
     color_eyre::install()
-        .map_err(|e| error!("{:#?}", e))
+        .map_err(|e| println!("{:#?}", e))
         .unwrap();
     if let Some(v) = args.version.as_ref() {
-        info!(
+        println!(
             "You have chosen to install a specific version of lodestone core ({}). {}",
-            v.bold(),
+            v.bold().blue(),
             get_current_version().await.ok().map_or_else(
                 || "".to_string(),
                 |current_version| {
-                    format!("Current version : {}", current_version.to_string().bold())
+                    format!(
+                        "Current version : {}",
+                        current_version.to_string().blue().bold()
+                    )
                 }
             )
         );
-        info!(
+        println!(
             "If you want to install the latest version, run the command without the --version flag"
         );
 
         let mut require_confirmation = true;
         if let Ok(current_version) = get_current_version().await {
             if current_version > *v {
-                warn!(
+                println!(
                     "You are installing an older version of lodestone ({}) than the one you currently have installed ({})",
-                    v.bold(), current_version.bold()
+                    v.bold().blue(), current_version.bold().blue()
                 );
-                info!(
-                    "Note that {}",
-                    "we do not support downgrading. Doing so may cause data corruption"
-                        .bold()
-                        .yellow()
+                println!(
+                    "Note that {} Doing so may cause {}",
+                    "we do not support downgrading.".bold().red(),
+                    "data loss or corruption".bold().red()
                 );
                 require_confirmation = true;
             }
         } else {
-            warn!(
+            println!(
                 "We couldn't find your current version of lodestone, so we can't check if you are downgrading"
+            );
+            println!(
+                "Note that {} Doing so may cause {}",
+                "we do not support downgrading.".bold().yellow(),
+                "data loss or corruption".bold().red()
             );
         }
         if !v.pre.is_empty() {
-            warn!(
-                "{}",
-                "You are installing a pre-release version of lodestone, this may be unstable"
-                    .bold()
-                    .yellow()
+            println!(
+                "You are installing a pre-release version of lodestone {},",
+                "which may be unstable".bold().yellow()
             );
             require_confirmation = true;
         }
         if !args.yes_all && require_confirmation {
-            prompt_for_confirmation("Hit enter to continue, or ctrl-c to abort", |_| true);
+            prompt_for_confirmation(
+                format!("Would you like to proceed? {}", "(y/n)".magenta().bold()),
+                |s| s.trim() == "y" || s.trim() == "yes",
+            );
         }
     }
     let lodestone_path = util::get_lodestone_path().ok_or_else(|| {
@@ -154,7 +113,7 @@ async fn main() {
     }).unwrap();
     std::fs::create_dir_all(&lodestone_path).unwrap();
     if args.uninstall {
-        warn!(
+        println!(
             "{}",
             format!(
                 "This will delete all your files in the lodestone directory {}",
@@ -165,28 +124,33 @@ async fn main() {
         );
         if !args.yes_all
             && prompt_for_confirmation(
-                "Are you sure you want to uninstall lodestone? (yes/n)",
+                format!(
+                    "Are you sure you want to uninstall lodestone? {}:",
+                    "(yes/n)".bold().magenta()
+                ),
                 |input| input.trim() == "yes",
             )
         {
-            info!("Uninstalling lodestone...");
-            let _ = uninstall::uninstall(&lodestone_path).map_err(|e| {
-                error!(
+            println!("Uninstalling lodestone...");
+            if let Err(e) = uninstall::uninstall(&lodestone_path) {
+                println!(
                     "Error uninstalling lodestone: {}, some files may need to be manually removed",
                     e
                 );
-                e
-            });
+            } else {
+                println!("Uninstalled lodestone successfully");
+            }
         } else {
-            info!("Aborting uninstall, no file changes were made.");
+            println!("Aborting uninstall, no file changes were made.");
         }
         return;
     }
     let executable_path = update_manager::try_update(&lodestone_path, args.version, args.yes_all)
         .await
         .map_err(|e| {
-            error!(
-                "Error updating lodestone: {}, launcher will now crash...",
+            println!(
+                "{}: {}, launcher will now crash...",
+                "Error updating lodestone".bold().red(),
                 e
             );
             e
@@ -194,22 +158,25 @@ async fn main() {
         .unwrap();
     if let Some(executable_path) = executable_path {
         let run_core_file_exists = PathBuf::from("run_core").is_file();
-        if args.yes_all
-            || run_core_file_exists
+        if run_core_file_exists
             || prompt_for_confirmation(
-                "Would you like to run lodestone core right now? (y/n)",
+                format!(
+                    "Would you like to run lodestone core right now? {}:",
+                    "(y/n)".magenta().bold()
+                ),
                 |input| input.trim() == "y" || input.trim() == "yes",
             )
         {
-            info!("Starting lodestone...");
+            println!("Starting lodestone...");
+            println!("If you would like to run lodestone automatically, create a file called '{}' in the launcher directory", "run_core".bold().blue());
             run_lodestone(&executable_path)
                 .map_err(|e| {
-                    error!("Error running lodestone: {}, launcher will now crash...", e);
+                    println!("Error running lodestone: {}, launcher will now crash...", e);
                     e
                 })
                 .unwrap()
         }
     } else {
-        info!("No lodestone core executable found, launcher will now exit...")
+        println!("No lodestone core executable found, launcher will now exit...")
     }
 }

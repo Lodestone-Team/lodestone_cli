@@ -3,7 +3,7 @@ use color_eyre::{eyre::Result, owo_colors::OwoColorize};
 use semver::Version;
 use std::path::{Path, PathBuf};
 
-use tracing::{info, warn};
+
 
 pub mod download;
 pub mod metadata;
@@ -26,24 +26,39 @@ pub async fn try_update(
     let current_version = match versions::get_current_version().await {
         Ok(v) => Some(v),
         Err(_e) => {
-            info!(
-                "We couldn't find a lodestone installation under {}",
+            println!(
+                "We couldn't find an existing lodestone core installation under {}",
                 lodestone_path.display()
             );
             #[cfg(target_os = "windows")]
             {
-                info!("If you have lodestone installed to a custom location, please shut down the launcher and follow the instructions at https://github.com/Lodestone-Team/lodestone/wiki/How-Tos#how-do-i-change-where-lodestone-stores-all-its-data");
+                println!("If you have lodestone installed to a custom location, please shut down the launcher and follow the instructions at {}", "https://github.com/Lodestone-Team/lodestone/wiki/How-Tos#how-do-i-change-where-lodestone-stores-all-its-data".underline());
             }
             #[cfg(target_os = "linux")]
             {
-                info!("If you have lodestone installed to a custom location, please shut down the launcher and set the LODESTONE_PATH environment variable to the path to your lodestone core installation with `export LODESTONE_PATH=<path>`");
+                println!("If you have lodestone installed to a custom location, please shut down the launcher and set the {} environment variable to the path to your lodestone core installation with `{}`", "LODESTONE_PATH".bold().blue(), "export LODESTONE_PATH=<your path here>".bold().blue());
             }
             // if lodestone_path is not empty, exit
             if lodestone_path.read_dir()?.next().is_some() {
-                info!("Path {} is not empty, this is normal if you ran an older version of lodestone core", lodestone_path.display());
-                warn!("{} Doing so may break your installation of Lodestone Desktop", "If you have Lodestone Desktop, DO NOT INSTALL A DIFFERENT VERSION OF LODESTONE CORE.".bold().yellow());
-                if !yes_all && !prompt_for_confirmation(format!("Would you like to install lodestone core {} to {}? Choosing 'n' will exit the launcher. (yes/n)", new_version.bold(), lodestone_path.display().bold()), |s| s.trim() == "yes") {
-                    info!("User chose not to install lodestone core, exiting");
+                println!(
+                    "{}, this is normal if you ran an older version of lodestone core",
+                    format!("Path {} is not empty", lodestone_path.display())
+                        .bold()
+                        .yellow()
+                );
+                println!("{} Doing so may break your installation of Lodestone Desktop", "If you have Lodestone Desktop, DO NOT INSTALL A DIFFERENT VERSION OF LODESTONE CORE.".bold().yellow());
+                if !yes_all
+                    && !prompt_for_confirmation(
+                        format!(
+                            "Would you like to install lodestone core {} to {}? {}:",
+                            new_version.bold().blue(),
+                            lodestone_path.display().bold().blue(),
+                            "(yes/n)".magenta().bold()
+                        ),
+                        |s| s.trim() == "yes",
+                    )
+                {
+                    println!("User chose not to install lodestone core, exiting");
                     return Ok(None);
                 }
             }
@@ -53,20 +68,20 @@ pub async fn try_update(
     match version_override {
         None => {
             if let Some(current_version) = current_version {
-                info!(
+                println!(
                     "Current version: {}, new version: {}",
-                    current_version.bold(),
-                    new_version.bold()
+                    current_version.bold().blue(),
+                    new_version.bold().blue(),
                 );
                 if current_version == new_version {
-                    info!("Current version is new version, skipping update");
+                    println!("Current version is new version, skipping update");
                     return Ok(Some(
                         lodestone_path.join(util::get_executable_name(&current_version)?),
                     ));
                 }
 
                 if current_version > new_version {
-                    warn!("Current version is greater than new version, skipping update");
+                    println!("Current version is greater than new version, skipping update");
                     return Ok(Some(
                         lodestone_path.join(util::get_executable_name(&current_version)?),
                     ));
@@ -78,9 +93,9 @@ pub async fn try_update(
                 if !yes_all
                     && !prompt_for_confirmation(
                         format!(
-                            "Would you like to update from {} to {}? (y/n)",
-                            current_version.bold(),
-                            new_version.bold()
+                            "Would you like to update to {}? {}:",
+                            new_version.bold().blue(),
+                            "(y/n)".magenta().bold()
                         ),
                         |s| s.trim() == "y" || s.trim() == "yes",
                     )
@@ -91,7 +106,7 @@ pub async fn try_update(
                 }
             }
         }
-        Some(v) => info!("Version override: {}", v),
+        Some(v) => println!("Version override: {}", v.bold().yellow()),
     }
 
     let (executable_path, exe_file) = download_release(&new_version, lodestone_path).await?;
@@ -106,6 +121,6 @@ pub async fn try_update(
         .write_metadata(&lodestone_path.join(".lodestone_launcher_metadata.json"))
         .await?;
 
-    info!("Installed lodestone v{}", new_version);
+    println!("Installed lodestone v{}", new_version);
     Ok(Some(executable_path))
 }

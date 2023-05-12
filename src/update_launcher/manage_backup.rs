@@ -9,8 +9,8 @@
 //     let dest_dir = lodestone_dir.join(PathBuf::from(".core_backup"));
 //     // println!("Copying {:?} to {:?}", dest_dir, lodestone_dir);
 //     match load_backup(&dest_dir, &lodestone_dir) {
-//         Ok(_) => info!("Backup loaded"),
-//         Err(e) => error!("Failed to load backup: {}", e),
+//         Ok(_) => println!("Backup loaded"),
+//         Err(e) => println!("Failed to load backup: {}", e),
 //     }
 // }
 
@@ -43,7 +43,7 @@
 
 // pub fn load_backup(backup_path: &Path, current_path: &Path) -> Result<()> {
 //     if backup_path.exists() {
-//         info!("Loading backup");
+//         println!("Loading backup");
 //         copy_dir(backup_path, current_path)?;
 //         fs::remove_dir_all(backup_path)?;
 //     }

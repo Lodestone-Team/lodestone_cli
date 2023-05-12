@@ -7,7 +7,6 @@ use std::{
     path::{Path, PathBuf},
 };
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, info};
 
 pub fn get_lodestone_path() -> Option<PathBuf> {
     let home_dir = dirs::home_dir()?;
@@ -40,7 +39,7 @@ pub fn get_executable_name(version: &Version) -> Result<String> {
 }
 
 pub async fn download_file(url: &str, dest: &Path, lodestone_path: &Path) -> Result<()> {
-    info!("Downloading {} to {}", url, dest.display());
+    println!("Downloading {} to {}", url, dest.display());
     let lodestone_tmp = lodestone_path.join("tmp");
     tokio::fs::create_dir_all(&lodestone_tmp)
         .await
@@ -74,7 +73,6 @@ pub async fn download_file(url: &str, dest: &Path, lodestone_path: &Path) -> Res
     tokio::fs::rename(&temp_file_path, &dest)
         .await
         .context("Failed to move temporary file")?;
-    debug!("Downloaded file to path {}", dest.display());
 
     Ok(())
 }

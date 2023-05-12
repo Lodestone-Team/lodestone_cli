@@ -2,10 +2,10 @@ use color_eyre::eyre::Result;
 use ctrlc::set_handler;
 use std::sync::{Arc, Mutex};
 use std::{path::Path, process::Command};
-use tracing::{error, info};
+
 
 pub fn run_lodestone(executable_path: &Path) -> Result<()> {
-    info!("Running lodestone core at {}", &executable_path.display());
+    println!("Running lodestone core at {}", &executable_path.display());
 
     #[cfg(unix)]
     {
@@ -23,19 +23,19 @@ pub fn run_lodestone(executable_path: &Path) -> Result<()> {
     let process = Arc::new(Mutex::new(process));
     let signal_process = process.clone();
     match set_handler(move || {
-        info!("Killing lodestone core");
+        println!("Killing lodestone core");
         let _ = signal_process.lock().unwrap().kill(); //unlikely to fail
     }) {
         Ok(_) => {}
         Err(e) => {
-            error!("Error setting up signal handler: {}", e);
+            println!("Error setting up signal handler: {}", e);
         }
     }
 
     // Wait for the process to terminate
     let status = process.lock().unwrap().wait()?;
     if !status.success() {
-        error!("Process exited with status code: {}", status);
+        println!("Process exited with status code: {}", status);
     }
 
     Ok(())
