@@ -5,10 +5,7 @@ use std::{path::Path, process::Command};
 use tracing::{error, info};
 
 pub fn run_lodestone(executable_path: &Path) -> Result<()> {
-    info!(
-        "Running lodestone core at {}",
-        &executable_path.display()
-    );
+    info!("Running lodestone core at {}", &executable_path.display());
 
     #[cfg(unix)]
     {

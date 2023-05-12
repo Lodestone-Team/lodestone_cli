@@ -8,13 +8,14 @@ use tracing::{info, warn};
 pub mod download;
 pub mod metadata;
 pub mod versions;
-use crate::{update_manager::download::download_release, util};
+use crate::{prompt_for_confirmation, update_manager::download::download_release, util};
 
 /// Updates the lodestone core to the latest release if needed
 /// Returns the path to the new (or old) executable
 pub async fn try_update(
     lodestone_path: &Path,
     version_override: Option<Version>,
+    yes_all: bool,
 ) -> Result<Option<PathBuf>> {
     let new_version = if let Some(ref v) = version_override {
         v.clone()
@@ -40,12 +41,9 @@ pub async fn try_update(
             // if lodestone_path is not empty, exit
             if lodestone_path.read_dir()?.next().is_some() {
                 info!("Path {} is not empty, this is normal if you ran an older version of lodestone core", lodestone_path.display());
-                info!("Would you like to install lodestone core {} to {}? Choosing 'n' will exit the launcher. (yes/n)", new_version.bold(), lodestone_path.display().bold());
                 warn!("{} Doing so may break your installation of Lodestone Desktop", "If you have Lodestone Desktop, DO NOT INSTALL A DIFFERENT VERSION OF LODESTONE CORE.".bold().yellow());
-                let mut answer = String::new();
-                std::io::stdin().read_line(&mut answer)?;
-                if answer.trim() != "yes" {
-                    info!("User chose not to install");
+                if !yes_all && !prompt_for_confirmation(format!("Would you like to install lodestone core {} to {}? Choosing 'n' will exit the launcher. (yes/n)", new_version.bold(), lodestone_path.display().bold()), |s| s.trim() == "yes") {
+                    info!("User chose not to install lodestone core, exiting");
                     return Ok(None);
                 }
             }
@@ -76,11 +74,17 @@ pub async fn try_update(
 
                 // Otherwise we need to update
                 // ask the user if they want to update in the terminal
-                let mut answer = String::new();
-                info!("Would you like to update to the new version? (y/n)");
-                std::io::stdin().read_line(&mut answer)?;
-                if answer.trim() != "y" {
-                    info!("User chose not to update");
+
+                if !yes_all
+                    && !prompt_for_confirmation(
+                        format!(
+                            "Would you like to update from {} to {}? (y/n)",
+                            current_version.bold(),
+                            new_version.bold()
+                        ),
+                        |s| s.trim() == "y" || s.trim() == "yes",
+                    )
+                {
                     return Ok(Some(
                         lodestone_path.join(util::get_executable_name(&current_version)?),
                     ));
