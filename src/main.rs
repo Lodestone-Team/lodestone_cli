@@ -63,7 +63,12 @@ struct Args {
     pub install_path: Option<PathBuf>,
     /// Skip update check
     #[clap(long, short)]
+    #[serde(default)]
     pub skip_update_check: bool,
+    /// Run lodestone core automatically
+    #[clap(long, short)]
+    #[serde(default)]
+    pub run_core: bool,
 }
 
 impl Args {
@@ -130,7 +135,7 @@ async fn main() {
     }
     let lodestone_path = util::get_lodestone_path().ok_or_else(|| {
         error!("Could not find lodestone path. We couldn't find your home directory, and you didn't specify a path with the --install-path flag");
-        error!("Please specify a path with the --install-path flag");
+        error!("Please specify a path with the '{}' flag", "--install-path".bold().blue());
         error!("Launcher will now exit");
         std::process::exit(1);
     }).unwrap();
@@ -153,7 +158,8 @@ async fn main() {
             )
         );
         info!(
-            "If you want to install the latest version, run the command without the --version flag"
+            "If you want to install the latest version, run the command without the '{}' flag",
+            "--version".bold().blue()
         );
 
         let mut require_confirmation = true;
@@ -250,8 +256,7 @@ async fn main() {
     })
     .unwrap();
     if let Some(executable_path) = executable_path {
-        let run_core_file_exists = PathBuf::from("run_core").is_file();
-        if run_core_file_exists
+        if args.run_core
             || prompt_for_confirmation(
                 format!(
                     "Would you like to run lodestone core right now? {}:",
@@ -261,13 +266,18 @@ async fn main() {
             )
         {
             info!("Starting lodestone...");
-            info!("If you would like to run lodestone automatically, create a file called '{}' in the launcher directory", "run_core".bold().blue());
+
             run_lodestone(&executable_path)
                 .map_err(|e| {
                     error!("Error running lodestone: {}, launcher will now crash...", e);
                     e
                 })
                 .unwrap()
+        } else {
+            info!(
+                "If you would like to run lodestone automatically, pass in the '{}' flag",
+                "run-core".bold().blue()
+            );
         }
     } else {
         info!("No lodestone core executable found, launcher will now exit...")

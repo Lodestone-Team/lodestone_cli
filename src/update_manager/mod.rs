@@ -102,7 +102,10 @@ pub async fn try_update(
                         |s| s.trim() == "y" || s.trim() == "yes",
                     )
                 {
-                    info!("You can skip update checks with the --skip-update-check flag");
+                    info!(
+                        "You can skip update checks with the '{}' flag",
+                        "--skip-update-check".bold().blue()
+                    );
                     return Ok(Some(
                         lodestone_path.join(util::get_executable_name(&current_version)?),
                     ));
