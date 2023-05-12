@@ -40,7 +40,7 @@ jobs:
         with:
           files: |
             ./target/release/lodestone_launcher
-          tag_name: ${{ github.ref }}
-          body: "This is a release build from ${{ github.ref }}."
+          tag_name: ${{ github.ref_name }}
+          body: "This is a release build from ${{ github.ref_name }}."
           draft: true
           prerelease: true
