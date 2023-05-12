@@ -32,14 +32,15 @@ jobs:
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v3.1.2
         with:
-          path: ./target/debug/lodestone_launcher
+          path: ./target/release/lodestone_launcher
           name: lodestone_launcher
 
-      - name: Upload a Release Artifact
-        uses: release-drafter/release-drafter@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release
+        uses: softprops/action-gh-release@v1
         with:
-          tag: ${{ github.ref }}
-          release-name: ${{ github.ref }}
+          files: |
+            ./target/release/lodestone_launcher
+          tag_name: ${{ github.ref }}
+          body: "This is a release build from ${{ github.ref }}."
+          draft: true
           prerelease: true
