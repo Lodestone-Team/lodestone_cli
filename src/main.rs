@@ -11,6 +11,7 @@ mod update_manager;
 use run_core::run_lodestone;
 
 use clap::Parser;
+use serde::{Deserialize, Serialize};
 
 use crate::update_manager::versions::get_current_version;
 
@@ -39,11 +40,12 @@ macro_rules! error {
 pub(crate) use {error, info};
 
 /// A simple CLI tool to install, update and run the lodestone core
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Default, Serialize, Deserialize)]
 #[command(author, about, long_about = None)]
 struct Args {
     /// Uninstall lodestone
     #[clap(long, short)]
+    #[serde(default)]
     pub uninstall: bool,
     /// Install a specific version of lodestone.
     /// If not specified, the latest version will be installed
@@ -52,7 +54,34 @@ struct Args {
     /// Say yes to all prompts.
     /// Bypasses pre-release confirmation, downgrade confirmation, dirty installation confirmation, and uninstall confirmation
     #[clap(long, short)]
+    #[serde(default)]
     pub yes_all: bool,
+    /// Tells the launcher where to install lodestone.
+    /// If not specified, the launcher will install lodestone in ~/.lodestone
+    /// This will set the LODESTONE_PATH environment variable for the current running process
+    #[clap(long, short)]
+    pub install_path: Option<PathBuf>,
+    /// Skip update check
+    #[clap(long, short)]
+    pub skip_update_check: bool,
+}
+
+impl Args {
+    pub fn merge(&mut self, other: Self) {
+        if let Some(version) = other.version {
+            self.version = Some(version);
+        }
+        if let Some(install_path) = other.install_path {
+            self.install_path = Some(install_path);
+        }
+        self.uninstall |= other.uninstall;
+        self.yes_all |= other.yes_all;
+        self.skip_update_check |= other.skip_update_check;
+    }
+}
+
+fn read_args_from_file() -> Option<Args> {
+    serde_json::from_reader(std::fs::File::open("args.json").ok()?).ok()
 }
 
 fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String) -> bool) -> bool {
@@ -65,13 +94,50 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
     predicate(input)
 }
 
+fn intro() {
+    info!("Lodestone Launcher 1.0.0");
+    info!(
+        "If you need help, visit the wiki at {wiki}, or join our discord at {discord}",
+        wiki = "https://github.com/Lodestone-Team/lodestone/wiki/Lodestone-Launcher".underline(),
+        discord = "https://discord.gg/PkHXRQXkf6".underline()
+    );
+}
+
 #[tokio::main]
 async fn main() {
     // setup_tracing();
-    let args = Args::parse();
     color_eyre::install()
-        .map_err(|e| println!("{:#?}", e))
+        .map_err(|e| error!("color eyre install error {e}"))
         .unwrap();
+    intro();
+    let args = match read_args_from_file() {
+        Some(mut args) => {
+            info!(
+                "{}",
+                "Detected a valid args.json file. Performing a merge of command line args and args.json"
+            );
+            args.merge(Args::parse());
+            args
+        }
+        None => {
+            info!("No valid args.json found. Using command line args");
+            Args::parse()
+        }
+    };
+
+    if let Some(path) = args.install_path {
+        std::env::set_var("LODESTONE_PATH", path);
+    }
+    let lodestone_path = util::get_lodestone_path().ok_or_else(|| {
+        error!("Could not find lodestone path. We couldn't find your home directory, and you didn't specify a path with the --install-path flag");
+        error!("Please specify a path with the --install-path flag");
+        error!("Launcher will now exit");
+        std::process::exit(1);
+    }).unwrap();
+    info!(
+        "LODESTONE_PATH={}",
+        lodestone_path.to_string_lossy().bold().blue()
+    );
     if let Some(v) = args.version.as_ref() {
         info!(
             "You chose to install a specific version of lodestone core ({}). {}",
@@ -132,17 +198,13 @@ async fn main() {
             return;
         }
     }
-    let lodestone_path = util::get_lodestone_path().ok_or_else(|| {
-        color_eyre::eyre::eyre!(
-            "Failed to get lodestone path. The LODESTONE_PATH environment variable is not set and we couldn't get your home directory"
-        )
-    }).unwrap();
+
     std::fs::create_dir_all(&lodestone_path).unwrap();
     if args.uninstall {
-        info!(
+        warn!(
             "{}",
             format!(
-                "This will delete all your files in the lodestone directory {}",
+                "This will delete the directory and all files in it: {}",
                 lodestone_path.display()
             )
             .bold()
@@ -171,17 +233,22 @@ async fn main() {
         }
         return;
     }
-    let executable_path = update_manager::try_update(&lodestone_path, args.version, args.yes_all)
-        .await
-        .map_err(|e| {
-            error!(
-                "{}: {}, launcher will now crash...",
-                "Error updating lodestone".bold().red(),
-                e
-            );
+    let executable_path = update_manager::try_update(
+        &lodestone_path,
+        args.version,
+        args.yes_all,
+        args.skip_update_check,
+    )
+    .await
+    .map_err(|e| {
+        error!(
+            "{}: {}, launcher will now crash...",
+            "Error updating lodestone".bold().red(),
             e
-        })
-        .unwrap();
+        );
+        e
+    })
+    .unwrap();
     if let Some(executable_path) = executable_path {
         let run_core_file_exists = PathBuf::from("run_core").is_file();
         if run_core_file_exists

@@ -16,6 +16,7 @@ pub async fn try_update(
     lodestone_path: &Path,
     version_override: Option<Version>,
     yes_all: bool,
+    skip_update_check: bool,
 ) -> Result<Option<PathBuf>> {
     let new_version = if let Some(ref v) = version_override {
         v.clone()
@@ -30,17 +31,8 @@ pub async fn try_update(
                 "We couldn't find an existing lodestone core installation under {}",
                 lodestone_path.display(),
             );
-            #[cfg(target_os = "windows")]
-            {
-                info!("If you have lodestone installed to a custom location, please point the launcher to your installation by setting the {} environmental variable. You may find further instructions at {}", 
-                "LODESTONE_PATH".bold().blue(),
-                "https://github.com/Lodestone-Team/lodestone/wiki/How-Tos#how-do-i-change-where-lodestone-stores-all-its-data".
-                underline());
-            }
-            #[cfg(target_os = "linux")]
-            {
-                info!("If you have lodestone installed to a custom location, please restart the launcher and set the {} environment variable to the path to your lodestone core installation with `{}`",  "LODESTONE_PATH".bold().blue(), "export LODESTONE_PATH=<your path here>".bold().blue());
-            }
+
+            info!("If you would like to launch lodestone core in a different directory, rerun the launcher with {}", "--install-path=<your path>".bold().blue());
             // if lodestone_path is not empty, exit
             if lodestone_path.read_dir()?.next().is_some() {
                 warn!(
@@ -72,6 +64,12 @@ pub async fn try_update(
     match version_override {
         None => {
             if let Some(current_version) = current_version {
+                if skip_update_check {
+                    info!("Skipping update check, using current version");
+                    return Ok(Some(
+                        lodestone_path.join(util::get_executable_name(&current_version)?),
+                    ));
+                }
                 info!(
                     "Current version: {}, new version: {}",
                     current_version.bold().blue(),
@@ -104,6 +102,7 @@ pub async fn try_update(
                         |s| s.trim() == "y" || s.trim() == "yes",
                     )
                 {
+                    info!("You can skip update checks with the --skip-update-check flag");
                     return Ok(Some(
                         lodestone_path.join(util::get_executable_name(&current_version)?),
                     ));
@@ -125,6 +124,9 @@ pub async fn try_update(
         .write_metadata(&lodestone_path.join(".lodestone_launcher_metadata.json"))
         .await?;
 
-    println!("Installed lodestone v{}", new_version);
+    info!(
+        "{}",
+        format!("Installed lodestone {new_version}").green().bold()
+    );
     Ok(Some(executable_path))
 }

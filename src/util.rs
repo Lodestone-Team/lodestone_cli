@@ -1,4 +1,5 @@
-use color_eyre::eyre::{eyre, Context, Result};
+use crate::info;
+use color_eyre::{eyre::{eyre, Context, Result}, owo_colors::OwoColorize};
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use semver::Version;
@@ -39,7 +40,7 @@ pub fn get_executable_name(version: &Version) -> Result<String> {
 }
 
 pub async fn download_file(url: &str, dest: &Path, lodestone_path: &Path) -> Result<()> {
-    println!("Downloading {} to {}", url, dest.display());
+    info!("Downloading {} to {}", url, dest.display().bold().blue());
     let lodestone_tmp = lodestone_path.join("tmp");
     tokio::fs::create_dir_all(&lodestone_tmp)
         .await
