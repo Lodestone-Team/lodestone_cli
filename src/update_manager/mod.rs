@@ -32,7 +32,7 @@ pub async fn try_update(
                 lodestone_path.display(),
             );
 
-            info!("If you would like to launch lodestone core in a different directory, rerun the launcher with {}", "--install-path=<your path>".bold().blue());
+            info!("If you would like to launch lodestone core in a different directory, rerun the cli with {}", "--install-path=<your path>".bold().blue());
             // if lodestone_path is not empty, exit
             if lodestone_path.read_dir()?.next().is_some() {
                 warn!(
@@ -124,7 +124,7 @@ pub async fn try_update(
     };
 
     new_metadata
-        .write_metadata(&lodestone_path.join(".lodestone_launcher_metadata.json"))
+        .write_metadata(&lodestone_path.join(".lodestone_cli_metadata.json"))
         .await?;
 
     info!(

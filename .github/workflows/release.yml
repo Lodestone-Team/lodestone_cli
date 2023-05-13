@@ -32,14 +32,14 @@ jobs:
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v3.1.2
         with:
-          path: ./target/release/lodestone_launcher
-          name: lodestone_launcher
+          path: ./target/release/lodestone_cli
+          name: lodestone_cli
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            ./target/release/lodestone_launcher
+            ./target/release/lodestone_cli
           tag_name: ${{ github.ref_name }}
           body: "This is a release build from ${{ github.ref_name }}."
           draft: true

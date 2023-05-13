@@ -33,5 +33,5 @@ jobs:
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v3.1.2
         with:
-          path: ./target/release/lodestone_launcher
-          name: lodestone_launcher
+          path: ./target/release/lodestone_cli
+          name: lodestone_cli

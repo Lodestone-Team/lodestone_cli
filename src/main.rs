@@ -55,8 +55,8 @@ struct Args {
     #[clap(long, short)]
     #[serde(default)]
     pub yes_all: bool,
-    /// Tells the launcher where to install lodestone.
-    /// If not specified, the launcher will install lodestone in ~/.lodestone
+    /// Tells the cli where to install lodestone.
+    /// If not specified, the cli will install lodestone in ~/.lodestone
     /// This will set the LODESTONE_PATH environment variable for the current running process
     #[clap(long, short)]
     pub install_path: Option<PathBuf>,
@@ -131,7 +131,7 @@ async fn main() {
     let lodestone_path = util::get_lodestone_path().ok_or_else(|| {
         error!("Could not find lodestone path. We couldn't find your home directory, and you didn't specify a path with the --install-path flag");
         error!("Please specify a path with the '{}' flag", "--install-path".bold().blue());
-        error!("Launcher will now exit");
+        error!("cli will now exit");
         std::process::exit(1);
     }).unwrap();
     info!(
@@ -243,7 +243,7 @@ async fn main() {
     .await
     .map_err(|e| {
         error!(
-            "{}: {}, launcher will now crash...",
+            "{}: {}, cli will now crash...",
             "Error updating lodestone".bold().red(),
             e
         );
@@ -269,13 +269,13 @@ async fn main() {
             }
             run_lodestone(&executable_path)
                 .map_err(|e| {
-                    error!("Error running lodestone: {}, launcher will now crash...", e);
+                    error!("Error running lodestone: {}, cli will now crash...", e);
                     e
                 })
                 .unwrap()
         } else {
         }
     } else {
-        info!("No lodestone core executable found, launcher will now exit...")
+        info!("No lodestone core executable found, cli will now exit...")
     }
 }

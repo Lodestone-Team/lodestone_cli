@@ -15,7 +15,7 @@ pub async fn get_latest_release() -> Result<Version> {
 
     let response = client
         .get(release_url)
-        .header("User-Agent", "lodestone_launcher")
+        .header("User-Agent", "lodestone_cli")
         .send()
         .await?;
     response.error_for_status_ref()?;
@@ -28,7 +28,7 @@ pub async fn get_latest_release() -> Result<Version> {
 pub async fn get_current_version() -> Result<Version> {
     let metadata_path = util::get_lodestone_path()
         .ok_or_else(|| color_eyre::eyre::eyre!("Could not find lodestone path"))?
-        .join(".lodestone_launcher_metadata.json");
+        .join(".lodestone_cli_metadata.json");
     let metadata = Metadata::read_metadata(&metadata_path).await?;
     Ok(metadata.current_version)
 }
@@ -39,7 +39,7 @@ pub async fn list_versions() -> Result<()> {
 
     let response = client
         .get(release_url)
-        .header("User-Agent", "lodestone_launcher")
+        .header("User-Agent", "lodestone_cli")
         .send()
         .await?;
     response.error_for_status_ref()?;
