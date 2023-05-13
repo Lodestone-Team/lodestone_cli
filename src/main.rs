@@ -261,7 +261,12 @@ async fn main() {
             )
         {
             info!("Starting lodestone...");
-
+            if !args.run_core {
+                info!(
+                    "If you would like to run lodestone automatically, pass in the '{}' flag",
+                    "run-core".bold().blue()
+                );
+            }
             run_lodestone(&executable_path)
                 .map_err(|e| {
                     error!("Error running lodestone: {}, launcher will now crash...", e);
@@ -269,10 +274,6 @@ async fn main() {
                 })
                 .unwrap()
         } else {
-            info!(
-                "If you would like to run lodestone automatically, pass in the '{}' flag",
-                "run-core".bold().blue()
-            );
         }
     } else {
         info!("No lodestone core executable found, launcher will now exit...")

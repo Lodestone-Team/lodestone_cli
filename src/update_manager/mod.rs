@@ -112,7 +112,7 @@ pub async fn try_update(
                 }
             }
         }
-        Some(v) => println!("Version override: {}", v.bold().yellow()),
+        Some(v) => info!("Version override: {}", v.bold().yellow()),
     }
 
     let (executable_path, exe_file) = download_release(&new_version, lodestone_path).await?;
