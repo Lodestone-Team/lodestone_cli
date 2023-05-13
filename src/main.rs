@@ -1,9 +1,8 @@
 mod uninstall;
 mod util;
-
+use color_eyre::owo_colors::OwoColorize;
 use std::{fmt::Display, io::Write, path::PathBuf};
 
-use color_eyre::owo_colors::OwoColorize;
 use semver::Version;
 
 mod run_core;
@@ -69,6 +68,10 @@ struct Args {
     #[clap(long, short)]
     #[serde(default)]
     pub run_core: bool,
+    /// List all available versions of lodestone
+    #[clap(long, short)]
+    #[serde(default)]
+    pub list_versions: bool,
 }
 
 impl Args {
@@ -82,6 +85,8 @@ impl Args {
         self.uninstall |= other.uninstall;
         self.yes_all |= other.yes_all;
         self.skip_update_check |= other.skip_update_check;
+        self.run_core |= other.run_core;
+        self.list_versions |= other.list_versions;
     }
 }
 
@@ -99,22 +104,10 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
     predicate(input)
 }
 
-fn intro() {
-    info!("Lodestone Launcher 1.0.0");
-    info!(
-        "If you need help, visit the wiki at {wiki}, or join our discord at {discord}",
-        wiki = "https://github.com/Lodestone-Team/lodestone/wiki/Lodestone-Launcher".underline(),
-        discord = "https://discord.gg/PkHXRQXkf6".underline()
-    );
-}
-
 #[tokio::main]
 async fn main() {
     // setup_tracing();
-    color_eyre::install()
-        .map_err(|e| error!("color eyre install error {e}"))
-        .unwrap();
-    intro();
+    let _ = color_eyre::install().map_err(|e| error!("color eyre install error {e}"));
     let args = match read_args_from_file() {
         Some(mut args) => {
             info!(
@@ -124,11 +117,13 @@ async fn main() {
             args.merge(Args::parse());
             args
         }
-        None => {
-            info!("No valid args.json found. Using command line args");
-            Args::parse()
-        }
+        None => Args::parse(),
     };
+
+    if args.list_versions {
+        update_manager::versions::list_versions().await.unwrap();
+        return;
+    }
 
     if let Some(path) = args.install_path {
         std::env::set_var("LODESTONE_PATH", path);
