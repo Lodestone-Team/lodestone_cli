@@ -20,26 +20,77 @@ jobs:
       # otherwise, read permission is required at least
       pull-requests: write
 
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "windows-latest"
+            target: "x86_64-pc-windows-msvc"
+            os: "windows"
+            arch: "x86_64"
+            postfix: ".exe"
+            cross: false
+          - platform: "ubuntu-latest"
+            target: "x86_64-unknown-linux-gnu"
+            os: "linux"
+            arch: "x86_64"
+            postfix: ""
+            cross: false
+          - platform: "ubuntu-latest"
+            target: "aarch64-unknown-linux-gnu"
+            os: "linux"
+            arch: "aarch64"
+            postfix: ""
+            cross: true
+          - platform: "macos-latest"
+            target: "x86_64-apple-darwin"
+            os: "macos"
+            arch: "x86_64"
+            postfix: ""
+            cross: false
+          - platform: "macos-latest"
+            target: "aarch64-apple-darwin"
+            os: "macos"
+            arch: "aarch64"
+            postfix: ""
+            cross: true
+
+    runs-on: ${{ matrix.platform }}
 
     steps:
       - uses: actions/checkout@v3
-      - name: Build
-        run: cargo build --verbose --release
-      - name: Run tests
-        run: cargo test --verbose
+      
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+          target: ${{ matrix.target }}
+
+      - name: Build Lodestone Core
+        uses: actions-rs/cargo@v1
+        with:
+          use-cross: ${{ matrix.cross }}
+          command: build
+          args: --release --target ${{ matrix.target }}
+
+      - name: Rename File
+        run: |
+          FILENAME="lodestone_core_${{matrix.os}}_${{matrix.arch}}_${{github.ref_name}}${{matrix.postfix}}"
+          echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
+          mv ./target/${{ matrix.target }}/release/lodestone_cli${{ matrix.postfix }} ./${FILENAME}
 
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v3.1.2
         with:
-          path: ./target/release/lodestone_cli
-          name: lodestone_cli
+          path: ./${{env.FILENAME}}
+          name: ${{env.FILENAME}}
 
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            ./target/release/lodestone_cli
+          files: ./${{env.FILENAME}}
           tag_name: ${{ github.ref_name }}
           body: "This is a release build from ${{ github.ref_name }}."
           draft: true
