@@ -58,7 +58,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v3
       
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -68,16 +69,16 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      - name: Build Lodestone Core
+      - name: Build Lodestone CLI
         uses: actions-rs/cargo@v1
         with:
           use-cross: ${{ matrix.cross }}
           command: build
-          args: --release --target ${{ matrix.target }}
+          args: --release --features "vendored-openssl" --target ${{ matrix.target }}
 
       - name: Rename File
         run: |
-          FILENAME="lodestone_core_${{matrix.os}}_${{matrix.arch}}_${{github.ref_name}}${{matrix.postfix}}"
+          FILENAME="lodestone_cli_${{matrix.os}}_${{matrix.arch}}_${{github.ref_name}}${{matrix.postfix}}"
           echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
           mv ./target/${{ matrix.target }}/release/lodestone_cli${{ matrix.postfix }} ./${FILENAME}
 
