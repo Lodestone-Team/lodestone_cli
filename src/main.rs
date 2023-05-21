@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use versions::get_current_version;
 
-const VERSION: semver::Version = semver::Version::new(0, 0, 0);
+const VERSION: semver::Version = semver::Version::new(1, 0, 0);
 
 // an info! macro that append the prefix "[i].green()" to the message
 macro_rules! info {
@@ -107,7 +107,7 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
     predicate(input)
 }
 
-fn compatability_check() -> bool {
+fn compatibility_check() -> bool {
     matches!(
         (env::consts::ARCH, env::consts::OS),
         ("x86_64", "windows") | ("aarch64", "linux") | ("x86_64", "linux") | ("x86_64", "macos")
@@ -127,7 +127,6 @@ async fn check_for_cli_update() -> Result<()> {
 
     let release: Release = response.json().await?;
     let latest_version = VersionWithV::from_str(release.tag_name.as_str())?;
-    dbg!(&latest_version);
 
     if latest_version.0 > VERSION {
         info!(
@@ -156,7 +155,7 @@ async fn main() {
         error!("Failed to check for cli update: {e}");
     }
 
-    if !compatability_check() {
+    if !compatibility_check() {
         error!("Your system is not supported by lodestone");
         error!("Please open an issue on github if you think this is a mistake");
         error!("cli will now exit");
