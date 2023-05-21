@@ -1,20 +1,21 @@
 use chrono::Utc;
 use color_eyre::{eyre::Result, owo_colors::OwoColorize};
-use semver::Version;
+
 use std::path::{Path, PathBuf};
 
 pub mod download;
 pub mod metadata;
-pub mod versions;
 use crate::{
     info, prompt_for_confirmation, update_manager::download::download_release, util, warn,
 };
 
-/// Updates the lodestone core to the latest release if needed
+use crate::versions::{self, VersionWithV};
+
+/// Updates the Lodestone Core to the latest release if needed
 /// Returns the path to the new (or old) executable
 pub async fn try_update(
     lodestone_path: &Path,
-    version_override: Option<Version>,
+    version_override: Option<VersionWithV>,
     yes_all: bool,
     skip_update_check: bool,
 ) -> Result<Option<PathBuf>> {
@@ -28,15 +29,15 @@ pub async fn try_update(
         Ok(v) => Some(v),
         Err(_e) => {
             info!(
-                "We couldn't find an existing lodestone core installation under {}",
+                "We couldn't find an existing Lodestone Core installation under {}",
                 lodestone_path.display(),
             );
 
-            info!("If you would like to launch lodestone core in a different directory, rerun the cli with {}", "--install-path=<your path>".bold().blue());
+            info!("If you would like to launch Lodestone Core in a different directory, rerun the cli with {}", "--install-path=<your path>".bold().blue());
             // if lodestone_path is not empty, exit
             if lodestone_path.read_dir()?.next().is_some() {
                 warn!(
-                    "{}, this is normal if you ran an older version of lodestone core",
+                    "{}, this is normal if you ran an older version of Lodestone Core",
                     format!(
                         "Path {} is not empty",
                         lodestone_path.display().bold().blue()
@@ -46,7 +47,7 @@ pub async fn try_update(
                 if !yes_all
                     && !prompt_for_confirmation(
                         format!(
-                            "Would you like to install lodestone core {} to {}? {}:",
+                            "Would you like to install Lodestone Core {} to {}? {}:",
                             new_version.bold().blue(),
                             lodestone_path.display().bold().blue(),
                             "(yes/n)".magenta().bold()
@@ -54,7 +55,7 @@ pub async fn try_update(
                         |s| s.trim() == "yes",
                     )
                 {
-                    info!("User chose not to install lodestone core, exiting");
+                    info!("User chose not to install Lodestone Core, exiting");
                     return Ok(None);
                 }
             }
@@ -71,19 +72,19 @@ pub async fn try_update(
                     ));
                 }
                 info!(
-                    "Current version: {}, new version: {}",
+                    "Current Lodestone Core version: {}, new Lodestone Core version: {}",
                     current_version.bold().blue(),
                     new_version.bold().blue(),
                 );
                 if current_version == new_version {
-                    info!("Current version is new version, skipping update");
+                    info!("Current Lodestone Core version is new version, skipping update");
                     return Ok(Some(
                         lodestone_path.join(util::get_executable_name(&current_version)?),
                     ));
                 }
 
                 if current_version > new_version {
-                    info!("Current version is greater than new version, skipping update");
+                    info!("Current Lodestone Core version is greater than new version, skipping update");
                     return Ok(Some(
                         lodestone_path.join(util::get_executable_name(&current_version)?),
                     ));

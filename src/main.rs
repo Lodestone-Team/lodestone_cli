@@ -1,9 +1,10 @@
 mod uninstall;
 mod util;
+mod versions;
+use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use std::{fmt::Display, io::Write, path::PathBuf};
-
-use semver::Version;
+use std::{env, fmt::Display, io::Write, path::PathBuf, str::FromStr};
+use versions::{Release, VersionWithV};
 
 mod run_core;
 mod update_manager;
@@ -12,7 +13,9 @@ use run_core::run_lodestone;
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use crate::update_manager::versions::get_current_version;
+use versions::get_current_version;
+
+const VERSION: semver::Version = semver::Version::new(0, 0, 0);
 
 // an info! macro that append the prefix "[i].green()" to the message
 macro_rules! info {
@@ -38,7 +41,7 @@ macro_rules! error {
 
 pub(crate) use {error, info};
 
-/// A simple CLI tool to install, update and run the lodestone core
+/// A simple CLI tool to install, update and run the Lodestone Core
 #[derive(Parser, Debug, Default, Serialize, Deserialize)]
 #[command(author, about, long_about = None)]
 struct Args {
@@ -49,7 +52,7 @@ struct Args {
     /// Install a specific version of lodestone.
     /// If not specified, the latest version will be installed
     #[clap(long, short)]
-    pub version: Option<Version>,
+    pub version: Option<VersionWithV>,
     /// Say yes to all prompts.
     /// Bypasses pre-release confirmation, downgrade confirmation, dirty installation confirmation, and uninstall confirmation
     #[clap(long, short)]
@@ -64,7 +67,7 @@ struct Args {
     #[clap(long, short)]
     #[serde(default)]
     pub skip_update_check: bool,
-    /// Run lodestone core automatically
+    /// Run Lodestone Core automatically
     #[clap(long, short)]
     #[serde(default)]
     pub run_core: bool,
@@ -104,10 +107,61 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
     predicate(input)
 }
 
+fn compatability_check() -> bool {
+    matches!(
+        (env::consts::ARCH, env::consts::OS),
+        ("x86_64", "windows") | ("aarch64", "linux") | ("x86_64", "linux") | ("x86_64", "macos")
+    )
+}
+
+async fn check_for_cli_update() -> Result<()> {
+    let release_url = "https://api.github.com/repos/Lodestone-Team/lodestone_cli/releases/latest";
+    let http = reqwest::Client::new();
+
+    let response = http
+        .get(release_url)
+        .header("User-Agent", "lodestone_cli")
+        .send()
+        .await?;
+    response.error_for_status_ref()?;
+
+    let release: Release = response.json().await?;
+    let latest_version = VersionWithV::from_str(release.tag_name.as_str())?;
+    dbg!(&latest_version);
+
+    if latest_version.0 > VERSION {
+        info!(
+            "{}",
+            format!(
+                "A new version of Lodestone CLI is available: {version}",
+                version = latest_version
+            )
+            .yellow()
+        );
+        info!(
+            "Read how to update here: {url}",
+            url = "https://github.com/Lodestone-Team/lodestone/wiki/Updating"
+        );
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() {
     // setup_tracing();
     let _ = color_eyre::install().map_err(|e| error!("color eyre install error {e}"));
+
+    if let Err(e) = check_for_cli_update().await {
+        error!("Failed to check for cli update: {e}");
+    }
+
+    if !compatability_check() {
+        error!("Your system is not supported by lodestone");
+        error!("Please open an issue on github if you think this is a mistake");
+        error!("cli will now exit");
+        std::process::exit(1);
+    }
     let args = match read_args_from_file() {
         Some(mut args) => {
             info!(
@@ -121,7 +175,7 @@ async fn main() {
     };
 
     if args.list_versions {
-        update_manager::versions::list_versions().await.unwrap();
+        versions::list_versions().await.unwrap();
         return;
     }
 
@@ -140,7 +194,7 @@ async fn main() {
     );
     if let Some(v) = args.version.as_ref() {
         info!(
-            "You chose to install a specific version of lodestone core ({}). {}",
+            "You chose to install a specific version of Lodestone Core ({}). {}",
             v.bold().blue(),
             get_current_version().await.ok().map_or_else(
                 || "".to_string(),
@@ -181,7 +235,7 @@ async fn main() {
                 "data loss or corruption".bold().red()
             );
         }
-        if !v.pre.is_empty() {
+        if !v.0.pre.is_empty() {
             warn!(
                 "You are installing a pre-release version of lodestone {},",
                 "which may be unstable".bold().yellow()
@@ -254,7 +308,7 @@ async fn main() {
         if args.run_core
             || prompt_for_confirmation(
                 format!(
-                    "Would you like to run lodestone core right now? {}:",
+                    "Would you like to run Lodestone Core right now? {}:",
                     "(y/n)".magenta().bold()
                 ),
                 |input| input.trim() == "y" || input.trim() == "yes",
@@ -276,6 +330,6 @@ async fn main() {
         } else {
         }
     } else {
-        info!("No lodestone core executable found, cli will now exit...")
+        info!("No Lodestone Core executable found, cli will now exit...")
     }
 }

@@ -1,10 +1,12 @@
 use color_eyre::eyre::Result;
-use semver::Version;
+
 use std::path::{Path, PathBuf};
 
 use crate::util;
 
-fn get_release_url(version: &Version) -> Result<String> {
+use super::versions::VersionWithV;
+
+fn get_release_url(version: &VersionWithV) -> Result<String> {
     // Get the target architecture and operating system
     let github_repo_url = "https://github.com/Lodestone-Team/lodestone_core/";
     let executable_name = util::get_executable_name(version)?;
@@ -16,7 +18,7 @@ fn get_release_url(version: &Version) -> Result<String> {
 }
 
 pub async fn download_release(
-    version: &Version,
+    version: &VersionWithV,
     lodestone_path: &Path,
 ) -> Result<(PathBuf, String)> {
     // we try to backup the current core before downloading the new one

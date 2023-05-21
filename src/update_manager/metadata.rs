@@ -5,9 +5,11 @@ use std::path::Path;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
+use crate::versions::VersionWithV;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Metadata {
-    pub current_version: semver::Version,
+    pub current_version: VersionWithV,
     pub last_updated: String,
     pub executable_name: String,
 }

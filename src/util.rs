@@ -1,8 +1,11 @@
-use crate::info;
-use color_eyre::{eyre::{eyre, Context, Result}, owo_colors::OwoColorize};
+use crate::{info, versions::VersionWithV};
+use color_eyre::{
+    eyre::{eyre, Context, Result},
+    owo_colors::OwoColorize,
+};
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
-use semver::Version;
+
 use std::{
     env,
     path::{Path, PathBuf},
@@ -18,15 +21,16 @@ pub fn get_lodestone_path() -> Option<PathBuf> {
     })
 }
 
-pub fn get_executable_name(version: &Version) -> Result<String> {
+pub fn get_executable_name(version: &VersionWithV) -> Result<String> {
     // Get the target architecture and operating system
     let target_arch = env::consts::ARCH;
     let target_os = env::consts::OS;
 
     let executable_name: String = match (target_arch, target_os) {
-        ("x86_64", "windows") => format!("lodestone_core_windows_{}.exe", version),
-        ("aarch64", "linux") => format!("lodestone_core_arm_{}", version),
-        ("x86_64", "linux") => format!("lodestone_core_{}", version),
+        ("x86_64", "windows") => format!("lodestone_core_windows_x86_64_{}.exe", version),
+        ("aarch64", "linux") => format!("lodestone_core_linux_aarch64_{}", version),
+        ("x86_64", "linux") => format!("lodestone_core_linux_x86_64_{}", version),
+        ("x86_64", "macos") => format!("lodestone_core_macos_x86_64_{}", version),
         _ => {
             return Err(eyre!(
                 "Unsupported target system {}-{}",

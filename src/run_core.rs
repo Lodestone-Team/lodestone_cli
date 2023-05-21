@@ -5,7 +5,7 @@ use ctrlc::set_handler;
 use std::sync::{Arc, Mutex};
 use std::{path::Path, process::Command};
 pub fn run_lodestone(executable_path: &Path) -> Result<()> {
-    info!("Running lodestone core at {}", &executable_path.display());
+    info!("Running Lodestone Core at {}", &executable_path.display());
 
     #[cfg(unix)]
     {
@@ -23,7 +23,7 @@ pub fn run_lodestone(executable_path: &Path) -> Result<()> {
     let process = Arc::new(Mutex::new(process));
     let signal_process = process.clone();
     match set_handler(move || {
-        info!("Killing lodestone core");
+        info!("Killing Lodestone Core");
         let _ = signal_process.lock().unwrap().kill(); //unlikely to fail
     }) {
         Ok(_) => {}
