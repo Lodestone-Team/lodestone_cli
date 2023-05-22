@@ -15,7 +15,7 @@ pub fn run_lodestone(executable_path: &Path) -> Result<()> {
         std::fs::set_permissions(executable_path, permissions)?;
     }
 
-    let process = Command::new(executable_path).spawn()?;
+    let process = Command::new(executable_path).arg("--is-cli").spawn()?;
 
     // let pid = process.id();
 
