@@ -79,14 +79,14 @@ jobs:
       - name: Rename File
         if: runner.os != 'Windows'
         run: |
-          FILENAME="lodestone_cli_${{matrix.os}}_${{matrix.arch}}_${{github.ref_name}}${{matrix.postfix}}"
+          FILENAME="lodestone_cli_${{matrix.os}}_${{matrix.arch}}${{matrix.postfix}}"
           echo "FILENAME=${FILENAME}" >> $GITHUB_ENV
           mv ./target/${{ matrix.target }}/release/lodestone_cli${{ matrix.postfix }} ./${FILENAME}
       
       - name: Rename File Windows
         if: runner.os == 'Windows'
         run: |
-          $FILENAME="lodestone_cli_${{matrix.os}}_${{matrix.arch}}_${{github.ref_name}}${{matrix.postfix}}"
+          $FILENAME="lodestone_cli_${{matrix.os}}_${{matrix.arch}}${{matrix.postfix}}"
           echo "FILENAME=$FILENAME" | Out-File -FilePath $env:GITHUB_ENV -Append
           mv ./target/${{ matrix.target }}/release/lodestone_cli${{ matrix.postfix }} ./${FILENAME}
 
