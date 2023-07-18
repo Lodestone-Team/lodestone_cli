@@ -3,8 +3,12 @@ mod util;
 mod versions;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use reqwest::Version;
 use self_update::cargo_crate_version;
-use std::{env, fmt::Display, io::Write, path::PathBuf};
+use std::{
+    env, fmt::Display, fs::File, io::Write, os::unix::prelude::PermissionsExt, path::PathBuf,
+    str::FromStr,
+};
 use versions::VersionWithV;
 
 mod run_core;
@@ -126,20 +130,44 @@ async fn self_update() -> Result<()> {
         aarch = env::consts::ARCH
     );
     tokio::task::spawn_blocking(move || {
-        let status = self_update::backends::github::Update::configure()
+        let releases = self_update::backends::github::ReleaseList::configure()
             .repo_owner("Lodestone-Team")
             .repo_name("lodestone_cli")
-            .bin_name(&bin_name)
-            .show_download_progress(true)
-            .current_version(cargo_crate_version!())
-            .target(&format!(
-                "{os}_{aarch}",
-                os = env::consts::OS,
-                aarch = env::consts::ARCH
-            ))
             .build()?
-            .update()?;
-        info!("Update status: `{}`", status.version());
+            .fetch()?;
+        let latest = releases[0].asset_for(&bin_name, None).unwrap();
+        let latest_sem_ver: semver::Version = VersionWithV::from_str(&releases[0].version)?.into();
+        let current_sem_ver = VERSION.with(|v| v.clone());
+        if latest_sem_ver <= current_sem_ver {
+            info!("CLI is up to date");
+            return Ok(());
+        } else {
+            info!(
+                "Found new version of CLI: {latest} (current: {current})",
+                latest = latest_sem_ver,
+                current = current_sem_ver
+            );
+        }
+
+        // create temp dir under the current directory
+        let temp_dir = tempfile::tempdir_in(std::env::current_dir()?)?;
+        let bin_path = temp_dir.path().join(&bin_name);
+        let bin_file = File::create(&bin_path)?;
+        self_update::Download::from_url(&latest.download_url)
+            .set_header(
+                reqwest::header::ACCEPT,
+                "application/octet-stream".parse().unwrap(),
+            )
+            .show_progress(true)
+            .download_to(bin_file)?;
+        #[cfg(not(windows))]
+        {
+            let mut permissions = std::fs::metadata(&bin_path)?.permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&bin_path, permissions)?;
+        }
+        self_update::Move::from_source(&bin_path).to_dest(&std::env::current_exe()?)?;
+        info!("CLI updated successfully, changes will take effect after restart");
         Ok(())
     })
     .await
