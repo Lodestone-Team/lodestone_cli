@@ -182,8 +182,6 @@ async fn main() {
         error!("Failed to self update: {e}");
     }
 
-    info!("Lodestone CLI v{}", VERSION.with(|v| v.to_string()));
-
     if !compatibility_check() {
         error!("Your system is not supported by lodestone");
         error!("Please open an issue on github if you think this is a mistake");
