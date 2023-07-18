@@ -3,12 +3,8 @@ mod util;
 mod versions;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use reqwest::Version;
-use self_update::cargo_crate_version;
-use std::{
-    env, fmt::Display, fs::File, io::Write, os::unix::prelude::PermissionsExt, path::PathBuf,
-    str::FromStr,
-};
+
+use std::{env, fmt::Display, fs::File, io::Write, path::PathBuf, str::FromStr};
 use versions::VersionWithV;
 
 mod run_core;
@@ -162,6 +158,7 @@ async fn self_update() -> Result<()> {
             .download_to(bin_file)?;
         #[cfg(not(windows))]
         {
+            use std::os::unix::prelude::PermissionsExt;
             let mut permissions = std::fs::metadata(&bin_path)?.permissions();
             permissions.set_mode(0o755);
             std::fs::set_permissions(&bin_path, permissions)?;
