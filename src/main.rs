@@ -3,8 +3,9 @@ mod util;
 mod versions;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use std::{env, fmt::Display, io::Write, path::PathBuf, str::FromStr};
-use versions::{Release, VersionWithV};
+use self_update::cargo_crate_version;
+use std::{env, fmt::Display, io::Write, path::PathBuf};
+use versions::VersionWithV;
 
 mod run_core;
 mod update_manager;
@@ -15,7 +16,10 @@ use serde::{Deserialize, Serialize};
 
 use versions::get_current_version;
 
-const VERSION: semver::Version = semver::Version::new(1, 0, 0);
+// parse from cargo.toml
+thread_local! {
+    pub static VERSION: semver::Version = semver::Version::parse(env!("CARGO_PKG_VERSION")).unwrap();
+}
 
 // an info! macro that append the prefix "[i].green()" to the message
 macro_rules! info {
@@ -63,7 +67,8 @@ struct Args {
     /// This will set the LODESTONE_PATH environment variable for the current running process
     #[clap(long, short)]
     pub install_path: Option<PathBuf>,
-    /// Skip update check
+    /// Skip ALL update check to GitHub, and try to use the local version of core if possible
+    /// If the local version is not available, the cli will try to download the latest version from GitHub
     #[clap(long, short)]
     #[serde(default)]
     pub skip_update_check: bool,
@@ -114,36 +119,31 @@ fn compatibility_check() -> bool {
     )
 }
 
-async fn check_for_cli_update() -> Result<()> {
-    let release_url = "https://api.github.com/repos/Lodestone-Team/lodestone_cli/releases/latest";
-    let http = reqwest::Client::new();
-
-    let response = http
-        .get(release_url)
-        .header("User-Agent", "lodestone_cli")
-        .send()
-        .await?;
-    response.error_for_status_ref()?;
-
-    let release: Release = response.json().await?;
-    let latest_version = VersionWithV::from_str(release.tag_name.as_str())?;
-
-    if latest_version.0 > VERSION {
-        info!(
-            "{}",
-            format!(
-                "A new version of Lodestone CLI is available: {version}",
-                version = latest_version
-            )
-            .yellow()
-        );
-        info!(
-            "Read how to update here: {url}",
-            url = "https://github.com/Lodestone-Team/lodestone/wiki/Updating"
-        );
-    }
-
-    Ok(())
+async fn self_update() -> Result<()> {
+    let bin_name = format!(
+        "lodestone_cli_{os}_{aarch}",
+        os = env::consts::OS,
+        aarch = env::consts::ARCH
+    );
+    tokio::task::spawn_blocking(move || {
+        let status = self_update::backends::github::Update::configure()
+            .repo_owner("Lodestone-Team")
+            .repo_name("lodestone_cli")
+            .bin_name(&bin_name)
+            .show_download_progress(true)
+            .current_version(cargo_crate_version!())
+            .target(&format!(
+                "{os}_{aarch}",
+                os = env::consts::OS,
+                aarch = env::consts::ARCH
+            ))
+            .build()?
+            .update()?;
+        info!("Update status: `{}`", status.version());
+        Ok(())
+    })
+    .await
+    .unwrap()
 }
 
 #[tokio::main]
@@ -151,9 +151,13 @@ async fn main() {
     // setup_tracing();
     let _ = color_eyre::install().map_err(|e| error!("color eyre install error {e}"));
 
-    if let Err(e) = check_for_cli_update().await {
-        error!("Failed to check for cli update: {e}");
+    info!("Lodestone CLI v{}", VERSION.with(|v| v.to_string()));
+
+    if let Err(e) = self_update().await {
+        error!("Failed to self update: {e}");
     }
+
+    info!("Lodestone CLI v{}", VERSION.with(|v| v.to_string()));
 
     if !compatibility_check() {
         error!("Your system is not supported by lodestone");

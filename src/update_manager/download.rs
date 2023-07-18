@@ -9,7 +9,7 @@ use super::versions::VersionWithV;
 fn get_release_url(version: &VersionWithV) -> Result<String> {
     // Get the target architecture and operating system
     let github_repo_url = "https://github.com/Lodestone-Team/lodestone_core/";
-    let executable_name = util::get_executable_name(version)?;
+    let executable_name = util::get_executable_name(version);
 
     Ok(format!(
         "{}releases/download/{}/{}",
@@ -27,7 +27,7 @@ pub async fn download_release(
     // let dest_dir = lodestone_path.join(PathBuf::from(".core_backup"));
     // copy_dir(&lodestone_path, &dest_dir)?;
 
-    let executable_name = util::get_executable_name(version)?;
+    let executable_name = util::get_executable_name(version);
     let release_url = get_release_url(version)?;
     let executable_path = lodestone_path.join(&executable_name);
     tokio::fs::create_dir_all(lodestone_path).await?;

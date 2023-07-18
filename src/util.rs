@@ -1,6 +1,6 @@
 use crate::{info, versions::VersionWithV};
 use color_eyre::{
-    eyre::{eyre, Context, Result},
+    eyre::{Context, Result},
     owo_colors::OwoColorize,
 };
 use futures_util::StreamExt;
@@ -21,7 +21,7 @@ pub fn get_lodestone_path() -> Option<PathBuf> {
     })
 }
 
-pub fn get_executable_name(version: &VersionWithV) -> Result<String> {
+pub fn get_executable_name(version: &VersionWithV) -> String {
     // Get the target architecture and operating system
     let target_arch = env::consts::ARCH;
     let target_os = env::consts::OS;
@@ -32,15 +32,11 @@ pub fn get_executable_name(version: &VersionWithV) -> Result<String> {
         ("x86_64", "linux") => format!("lodestone_core_linux_x86_64_{}", version),
         ("x86_64", "macos") => format!("lodestone_core_macos_x86_64_{}", version),
         _ => {
-            return Err(eyre!(
-                "Unsupported target system {}-{}",
-                target_os,
-                target_arch
-            ))
+            panic!("Unsupported target system {}-{}", target_os, target_arch);
         }
     };
 
-    Ok(executable_name)
+    executable_name
 }
 
 pub async fn download_file(url: &str, dest: &Path, lodestone_path: &Path) -> Result<()> {

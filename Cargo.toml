@@ -1,6 +1,6 @@
 [package]
 name = "lodestone_cli"
-version = "1.0.0"
+version = "1.0.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,3 +20,4 @@ ansi_term = "0.12.1"
 indicatif = "0.17.3"
 futures-util = "0.3.28"
 tempfile = "3.5.0"
+self_update = "0.37.0"
