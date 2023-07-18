@@ -163,7 +163,8 @@ async fn self_update() -> Result<()> {
             permissions.set_mode(0o755);
             std::fs::set_permissions(&bin_path, permissions)?;
         }
-        self_update::Move::from_source(&bin_path).to_dest(&std::env::current_exe()?)?;
+
+        self_replace::self_replace(&bin_path)?;
         info!("CLI updated successfully, changes will take effect after restart");
         Ok(())
     })
