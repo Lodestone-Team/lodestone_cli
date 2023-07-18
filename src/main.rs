@@ -139,7 +139,7 @@ async fn self_update() -> Result<()> {
             return Ok(());
         } else {
             info!(
-                "Found new version of CLI: {latest} (current: {current})",
+                "Updating CLI from {current} to {latest}",
                 latest = latest_sem_ver,
                 current = current_sem_ver
             );
