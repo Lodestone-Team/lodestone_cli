@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 
 pub mod download;
 pub mod metadata;
+pub mod source;
 use crate::util::get_lodestone_path;
 use crate::{
     info, prompt_for_confirmation, update_manager::download::download_release, util, warn,
@@ -12,11 +13,14 @@ use crate::{
 
 use crate::versions::{self, get_current_version, VersionWithV};
 
+use self::source::Source;
+
 /// Updates the Lodestone Core to the latest release if needed
 /// Returns the path to the new (or old) executable
 pub async fn try_update(
     lodestone_path: &Path,
     version_override: Option<VersionWithV>,
+    source: Option<Source>,
     yes_all: bool,
     skip_update_check: bool,
 ) -> Result<Option<PathBuf>> {
@@ -52,6 +56,8 @@ pub async fn try_update(
 
     let new_version = if let Some(ref v) = version_override {
         v.clone()
+    } else if let Some(source) = source {
+        source.get_latest_release().unwrap().version.clone()
     } else {
         versions::get_latest_release().await?
     };

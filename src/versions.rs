@@ -13,7 +13,7 @@ pub struct Release {
     pub tag_name: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VersionWithV(pub Version);
 
 impl Serialize for VersionWithV {

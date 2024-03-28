@@ -1,0 +1,14 @@
+{
+    "name": "Example source",
+    "description": "example source for demo purposes",
+    "releases": {
+      "v0.1.0": {
+        "version": "v0.1.0",
+        "name": "Example release",
+        "body": "Example release body",
+        "urls": {
+          "x86_64_windows": "https://example.com"
+        }
+      }
+    }
+  }

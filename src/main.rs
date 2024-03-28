@@ -80,6 +80,10 @@ struct Args {
     #[clap(long, short)]
     #[serde(default)]
     pub list_versions: bool,
+    /// Source to download the core from
+    #[clap(long, short)]
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 impl Args {
@@ -206,6 +210,12 @@ async fn main() {
         return;
     }
 
+    let mut source = None;
+
+    if let Some(source_url) = args.source {
+        source = Some(update_manager::source::Source::from_url(&source_url).await.unwrap());
+    }
+
     if let Some(path) = args.install_path {
         std::env::set_var("LODESTONE_PATH", path);
     }
@@ -318,6 +328,7 @@ async fn main() {
     let executable_path = update_manager::try_update(
         &lodestone_path,
         args.version,
+        source,
         args.yes_all,
         args.skip_update_check,
     )
