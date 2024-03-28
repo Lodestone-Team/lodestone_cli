@@ -81,7 +81,7 @@ struct Args {
     #[serde(default)]
     pub list_versions: bool,
     /// Source to download the core from
-    #[clap(long, short)]
+    #[clap(long)]
     #[serde(default)]
     pub source: Option<String>,
 }
@@ -213,7 +213,9 @@ async fn main() {
     let mut source = None;
 
     if let Some(source_url) = args.source {
+        info!("Fetching source from {}", source_url);
         source = Some(update_manager::source::Source::from_url(&source_url).await.unwrap());
+        info!("Source fetched successfully");
     }
 
     if let Some(path) = args.install_path {
