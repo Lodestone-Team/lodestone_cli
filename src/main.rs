@@ -115,7 +115,7 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
 fn compatibility_check() -> bool {
     matches!(
         (env::consts::ARCH, env::consts::OS),
-        ("x86_64", "windows") | ("aarch64", "linux") | ("x86_64", "linux") | ("x86_64", "macos")
+        ("x86_64", "windows") | ("x86_64", "linux") | ("aarch64", "macos")
     )
 }
 
@@ -184,7 +184,7 @@ async fn main() {
     }
 
     if !compatibility_check() {
-        error!("Your system is not supported by lodestone");
+        error!("{}", format!("Your system ({} {}) is not supported by lodestone", env::consts::OS, env::consts::ARCH));
         error!("Please open an issue on github if you think this is a mistake");
         error!("cli will now exit");
         std::process::exit(1);
