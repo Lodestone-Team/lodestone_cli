@@ -3,6 +3,7 @@ mod util;
 mod versions;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
+use util::executable_name_without_version;
 
 use std::{env, fmt::Display, fs::File, io::Write, path::PathBuf, str::FromStr};
 use versions::VersionWithV;
@@ -54,20 +55,25 @@ struct Args {
     #[serde(default)]
     pub uninstall: bool,
     /// Install a specific version of lodestone.
+    /// 
     /// If not specified, the latest version will be installed
     #[clap(long, short)]
     pub version: Option<VersionWithV>,
     /// Say yes to all prompts.
+    /// 
     /// Bypasses pre-release confirmation, downgrade confirmation, dirty installation confirmation, and uninstall confirmation
     #[clap(long, short)]
     #[serde(default)]
     pub yes_all: bool,
     /// Tells the cli where to install lodestone.
+    /// 
     /// If not specified, the cli will install lodestone in ~/.lodestone
+    /// 
     /// This will set the LODESTONE_PATH environment variable for the current running process
     #[clap(long, short)]
     pub install_path: Option<PathBuf>,
     /// Skip ALL update check to GitHub, and try to use the local version of core if possible
+    /// 
     /// If the local version is not available, the cli will try to download the latest version from GitHub
     #[clap(long, short)]
     #[serde(default)]
@@ -110,13 +116,6 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
         .read_line(&mut input)
         .expect("Failed to read line");
     predicate(input)
-}
-
-fn compatibility_check() -> bool {
-    matches!(
-        (env::consts::ARCH, env::consts::OS),
-        ("x86_64", "windows") | ("x86_64", "linux") | ("aarch64", "macos")
-    )
 }
 
 async fn self_update() -> Result<()> {
@@ -183,8 +182,15 @@ async fn main() {
         error!("Failed to self update: {e}");
     }
 
-    if !compatibility_check() {
-        error!("{}", format!("Your system ({} {}) is not supported by lodestone", env::consts::OS, env::consts::ARCH));
+    if executable_name_without_version().is_none() {
+        error!(
+            "{}",
+            format!(
+                "Your system ({} {}) is not supported by lodestone",
+                env::consts::OS,
+                env::consts::ARCH
+            )
+        );
         error!("Please open an issue on github if you think this is a mistake");
         error!("cli will now exit");
         std::process::exit(1);
@@ -354,8 +360,7 @@ async fn main() {
                     e
                 })
                 .unwrap()
-        } else {
-        }
+        } 
     } else {
         info!("No Lodestone Core executable found, cli will now exit...")
     }
