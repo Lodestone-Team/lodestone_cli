@@ -27,6 +27,7 @@ pub fn executable_name_without_version() -> Option<String> {
     match (target_arch, target_os) {
         ("x86_64", "windows") => Some("lodestone_core_windows_x86_64".to_string()),
         ("x86_64", "linux") => Some("lodestone_core_linux_x86_64".to_string()),
+        ("aarch64", "linux") => Some("lodestone_core_linux_aarch".to_string()),
         ("aarch64", "macos") => Some("lodestone_core_macos_aarch".to_string()),
         _ => None,
     }
