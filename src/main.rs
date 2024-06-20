@@ -55,25 +55,25 @@ struct Args {
     #[serde(default)]
     pub uninstall: bool,
     /// Install a specific version of lodestone.
-    /// 
+    ///
     /// If not specified, the latest version will be installed
     #[clap(long, short)]
     pub version: Option<VersionWithV>,
     /// Say yes to all prompts.
-    /// 
+    ///
     /// Bypasses pre-release confirmation, downgrade confirmation, dirty installation confirmation, and uninstall confirmation
     #[clap(long, short)]
     #[serde(default)]
     pub yes_all: bool,
     /// Tells the cli where to install lodestone.
-    /// 
+    ///
     /// If not specified, the cli will install lodestone in ~/.lodestone
-    /// 
+    ///
     /// This will set the LODESTONE_PATH environment variable for the current running process
     #[clap(long, short)]
     pub install_path: Option<PathBuf>,
     /// Skip ALL update check to GitHub, and try to use the local version of core if possible
-    /// 
+    ///
     /// If the local version is not available, the cli will try to download the latest version from GitHub
     #[clap(long, short)]
     #[serde(default)]
@@ -192,8 +192,17 @@ async fn main() {
             )
         );
         error!("Please open an issue on github if you think this is a mistake");
-        error!("cli will now exit");
-        std::process::exit(1);
+        if !prompt_for_confirmation(
+            format!(
+                "Would you still like to proceed? Weird things may happen! {}",
+                "(y/n):".magenta().bold()
+            ),
+            |s| s.trim() == "y" || s.trim() == "yes",
+        ) {
+            error!("cli will now exit");
+            std::process::exit(1);
+        }
+        info!("Proceeding with installation with unsupported system");
     }
     let args = match read_args_from_file() {
         Some(mut args) => {
@@ -360,7 +369,7 @@ async fn main() {
                     e
                 })
                 .unwrap()
-        } 
+        }
     } else {
         info!("No Lodestone Core executable found, cli will now exit...")
     }
