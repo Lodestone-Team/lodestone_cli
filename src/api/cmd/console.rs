@@ -219,10 +219,29 @@ pub async fn players(ctx: &Ctx, args: PlayersArgs) -> CliResult<()> {
         );
         return Ok(());
     }
-    let players = conn.get(&["instance", &inst.uuid, "players"]).await?;
-    ctx.out.show(&players, || {
+    let uuid = inst.uuid.as_str();
+    let (list_route, count_route, max_route) = (
+        ["instance", uuid, "players"],
+        ["instance", uuid, "players", "count"],
+        ["instance", uuid, "players", "max"],
+    );
+    let (players, count, max) = tokio::join!(
+        conn.get(&list_route),
+        conn.get(&count_route),
+        conn.get(&max_route),
+    );
+    let players = players?;
+    // the counts are only known while the server runs
+    let count = count.unwrap_or(Value::Null);
+    let max = max.unwrap_or(Value::Null);
+    let doc = json!({"uuid": inst.uuid, "players": players, "count": count, "max": max});
+    ctx.out.show(&doc, || {
         let list = players.as_array().cloned().unwrap_or_default();
-        println!("{} player(s) online on {inst}", list.len());
+        let online = count.as_u64().unwrap_or(list.len() as u64);
+        match max.as_u64() {
+            Some(max) => println!("{online}/{max} players online on {inst}"),
+            None => println!("{online} player(s) online on {inst}"),
+        }
         let mut table = Table::new(["NAME", "UUID"]);
         for p in &list {
             table.row([cell(&p["name"]), cell(&p["uuid"])]);

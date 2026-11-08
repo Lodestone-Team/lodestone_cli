@@ -64,8 +64,9 @@ fn shell_commands(line: &str) -> Vec<Vec<String>> {
             words
                 .into_iter()
                 .skip_while(|w| {
-                    w.split_once('=')
-                        .is_some_and(|(k, _)| !k.is_empty() && k.chars().all(|c| c.is_ascii_uppercase() || c == '_'))
+                    w.split_once('=').is_some_and(|(k, _)| {
+                        !k.is_empty() && k.chars().all(|c| c.is_ascii_uppercase() || c == '_')
+                    })
                 })
                 .collect()
         })
@@ -126,7 +127,11 @@ fn the_command_definitions_are_valid() {
 #[test]
 fn every_skill_example_parses() {
     let examples = skill_examples();
-    assert!(examples.len() > 80, "found only {} examples", examples.len());
+    assert!(
+        examples.len() > 80,
+        "found only {} examples",
+        examples.len()
+    );
     for words in &examples {
         let args = Args::try_parse_from(words)
             .unwrap_or_else(|e| panic!("`{}` does not parse:\n{e}", words.join(" ")));
@@ -156,12 +161,25 @@ fn shell_splitting() {
 fn legacy_flags_still_work() {
     let args = parse(&[]).unwrap();
     assert!(args.command.is_none());
-    let args = parse(&["-y", "-r", "-s", "--version", "0.5.1", "-i", "/opt/lodestone"]).unwrap();
+    let args = parse(&[
+        "-y",
+        "-r",
+        "-s",
+        "--version",
+        "0.5.1",
+        "-i",
+        "/opt/lodestone",
+    ])
+    .unwrap();
     assert!(args.command.is_none());
     assert!(args.yes_all && args.run_core && args.skip_update_check);
     assert_eq!(args.version.unwrap().to_string(), "v0.5.1");
     assert_eq!(args.install_path.unwrap().to_str(), Some("/opt/lodestone"));
-    assert!(parse(&["--uninstall", "--list-versions"]).unwrap().uninstall);
+    assert!(
+        parse(&["--uninstall", "--list-versions"])
+            .unwrap()
+            .uninstall
+    );
     // args.json keeps working and never holds the new options
     let from_file: Args = serde_json::from_str(r#"{"run_core": true}"#).unwrap();
     assert!(from_file.run_core && from_file.command.is_none());
@@ -176,7 +194,10 @@ fn global_options_go_anywhere() {
     ] {
         let args = parse(words).unwrap();
         assert!(args.api.json, "{words:?}");
-        assert!(matches!(args.command, Some(Command::Instance(InstanceCmd::List))));
+        assert!(matches!(
+            args.command,
+            Some(Command::Instance(InstanceCmd::List))
+        ));
     }
     let args = parse(&["--profile", "home", "--yes", "instance", "delete", "x"]).unwrap();
     assert_eq!(args.api.profile.as_deref(), Some("home"));
@@ -186,18 +207,29 @@ fn global_options_go_anywhere() {
 #[test]
 fn files_take_an_instance_or_global() {
     let args = parse(&["files", "survival", "ls", "world"]).unwrap();
-    let Some(Command::Files(files)) = args.command else { panic!() };
+    let Some(Command::Files(files)) = args.command else {
+        panic!()
+    };
     assert_eq!(files.instance.as_deref(), Some("survival"));
     assert!(matches!(files.action, FilesCmd::Ls { path: Some(ref p) } if p == "world"));
 
     let args = parse(&["files", "--global", "ls", "/tmp"]).unwrap();
-    let Some(Command::Files(files)) = args.command else { panic!() };
+    let Some(Command::Files(files)) = args.command else {
+        panic!()
+    };
     assert!(files.global && files.instance.is_none());
 
     let args = parse(&["files", "survival", "cp", "a", "b", "dest"]).unwrap();
-    let Some(Command::Files(files)) = args.command else { panic!() };
-    let FilesCmd::Cp { sources, dest } = files.action else { panic!() };
-    assert_eq!((sources, dest.as_str()), (vec!["a".to_string(), "b".to_string()], "dest"));
+    let Some(Command::Files(files)) = args.command else {
+        panic!()
+    };
+    let FilesCmd::Cp { sources, dest } = files.action else {
+        panic!()
+    };
+    assert_eq!(
+        (sources, dest.as_str()),
+        (vec!["a".to_string(), "b".to_string()], "dest")
+    );
 
     assert!(parse(&["files", "ls"]).is_err());
     assert!(parse(&["files", "survival", "--global", "ls", "/"]).is_err());
@@ -207,15 +239,24 @@ fn files_take_an_instance_or_global() {
 #[test]
 fn console_shorthand_and_send() {
     let args = parse(&["console", "survival", "-f", "--until", "Done"]).unwrap();
-    let Some(Command::Console(console)) = args.command else { panic!() };
+    let Some(Command::Console(console)) = args.command else {
+        panic!()
+    };
     assert!(console.action.is_none());
     assert_eq!(console.show.instance.as_deref(), Some("survival"));
     assert!(console.show.follow);
 
-    let args = parse(&["console", "send", "survival", "tp", "@p", "~", "-10", "~", "--json"]).unwrap();
+    let args = parse(&[
+        "console", "send", "survival", "tp", "@p", "~", "-10", "~", "--json",
+    ])
+    .unwrap();
     assert!(args.api.json);
-    let Some(Command::Console(console)) = args.command else { panic!() };
-    let Some(ConsoleCmd::Send { instance, command }) = console.action else { panic!() };
+    let Some(Command::Console(console)) = args.command else {
+        panic!()
+    };
+    let Some(ConsoleCmd::Send { instance, command }) = console.action else {
+        panic!()
+    };
     assert_eq!(instance, "survival");
     assert_eq!(command.join(" "), "tp @p ~ -10 ~");
 
@@ -227,13 +268,28 @@ fn console_shorthand_and_send() {
 #[test]
 fn mods_commands() {
     let args = parse(&["mods", "survival", "update", "--all"]).unwrap();
-    let Some(Command::Mods(mods)) = args.command else { panic!() };
-    assert!(matches!(mods.action, ModsCmd::Update { all: true, r#mod: None }));
+    let Some(Command::Mods(mods)) = args.command else {
+        panic!()
+    };
+    assert!(matches!(
+        mods.action,
+        ModsCmd::Update {
+            all: true,
+            r#mod: None
+        }
+    ));
     assert!(parse(&["mods", "survival", "update"]).is_err());
     assert!(parse(&["mods", "survival", "update", "sodium", "--all"]).is_err());
-    let args = parse(&["mods", "survival", "search", "fabric", "api", "--limit", "5"]).unwrap();
-    let Some(Command::Mods(mods)) = args.command else { panic!() };
-    let ModsCmd::Search { query, page, .. } = mods.action else { panic!() };
+    let args = parse(&[
+        "mods", "survival", "search", "fabric", "api", "--limit", "5",
+    ])
+    .unwrap();
+    let Some(Command::Mods(mods)) = args.command else {
+        panic!()
+    };
+    let ModsCmd::Search { query, page, .. } = mods.action else {
+        panic!()
+    };
     assert_eq!(query.join(" "), "fabric api");
     assert_eq!(page.limit, 5);
     assert!(parse(&["mods", "survival", "search", "x", "--limit", "500"]).is_err());
