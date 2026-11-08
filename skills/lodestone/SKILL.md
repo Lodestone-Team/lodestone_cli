@@ -104,6 +104,8 @@ lodestone_cli --json instance description survival "Our main world"
 lodestone_cli --json instance settings get survival
 lodestone_cli --json instance settings set survival max_ram 6144
 lodestone_cli --json instance settings set survival max-players 30
+lodestone_cli --json instance settings set survival auto_start true
+lodestone_cli --json instance settings set survival restart_on_crash true
 lodestone_cli --json instance delete survival --yes
 ```
 
@@ -112,9 +114,10 @@ lodestone_cli --json instance delete survival --yes
 - `instance settings get` lists every setting id. `server.properties` settings (such as
   `motd`, `difficulty`, `max-players`) appear after the server has run once. Use
   `section.setting` if an id is in two sections.
-- Auto start and restart on crash can only be set at creation (`--auto-start`,
-  `--restart-on-crash`).
-- `instance create-atom` (owner only) and `instance docker-watch <container>` exist too.
+- Auto start and restart on crash are set with `--auto-start` and `--restart-on-crash` at
+  creation, or later with `instance settings set <instance> auto_start|restart_on_crash true|false`.
+- `instance create-atom --url <url> --name <name> --wait` (owner only, needs code execution)
+  and `instance docker-watch <container>` exist too. `create-atom` returns the new UUID.
 
 Console, players, resource usage:
 
@@ -151,6 +154,8 @@ lodestone_cli --json files --global ls /home/minecraft
 ```
 
 `files write` reads stdin when `--from` is missing. Downloading a folder gives a zip.
+`zip` and `unzip` run in the background and return the task id as `task_id`; with `--wait`
+they wait for that task and exit 1 with kind `TaskFailed` if it fails.
 
 Mods and plugins (Fabric, Forge, Paper and Spigot instances; plugin instances use the same
 commands):
@@ -223,8 +228,8 @@ lodestone_cli --json playit status
 lodestone_cli --json playit tunnels
 ```
 
-`tasks --wait` takes a task id or the UUID of an instance being created; it exits 1 with kind
-`TaskFailed` if the task fails.
+`tasks --wait` takes a task id (such as the `task_id` of `files zip`) or the UUID of an
+instance being created; it exits 1 with kind `TaskFailed` if the task fails.
 
 ## Workflows
 
