@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use futures_util::StreamExt;
 use reqwest::Method;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use crate::api::b64::encode_path;
 use crate::api::cli::{FilesArgs, FilesCmd};
@@ -271,20 +271,20 @@ pub async fn run(ctx: &Ctx, args: FilesArgs) -> CliResult<()> {
                     timeout: None,
                 };
                 let (_, task) = waiter
-                    .wait(Target::NewTaskWithPrefix("Zipping ".into()), request)
+                    .wait_for(|response| task_target(response, "Zipping "), request)
                     .await?;
                 ctx.out.done(
                     format!("Zipped {} into {output}", paths.join(", ")),
                     json!({"output": output, "task": task.to_json()}),
                 );
             } else {
-                request().await?;
+                let task_id = request().await?;
                 ctx.out.done(
                     format!(
                         "Zipping {} into {output} in the background (see `lodestone_cli tasks`)",
                         paths.join(", ")
                     ),
-                    json!({"output": output, "state": "started"}),
+                    json!({"output": output, "state": "started", "task_id": task_id}),
                 );
             }
             Ok(())
@@ -312,21 +312,30 @@ pub async fn run(ctx: &Ctx, args: FilesArgs) -> CliResult<()> {
                     timeout: None,
                 };
                 let (_, task) = waiter
-                    .wait(Target::NewTaskWithPrefix("Unzipping ".into()), request)
+                    .wait_for(|response| task_target(response, "Unzipping "), request)
                     .await?;
                 ctx.out.done(
                     format!("Extracted {path}"),
                     json!({"path": path, "task": task.to_json()}),
                 );
             } else {
-                request().await?;
+                let task_id = request().await?;
                 ctx.out.done(
                     format!("Extracting {path} in the background (see `lodestone_cli tasks`)"),
-                    json!({"path": path, "state": "started"}),
+                    json!({"path": path, "state": "started", "task_id": task_id}),
                 );
             }
             Ok(())
         }
+    }
+}
+
+/// The task a zip or unzip request started: the id the core returns, or, for older cores
+/// that return nothing, the first new task whose name starts with `prefix`.
+fn task_target(response: &Value, prefix: &str) -> Target {
+    match response.as_str() {
+        Some(id) => Target::Id(id.to_string()),
+        None => Target::NewTaskWithPrefix(prefix.to_string()),
     }
 }
 
@@ -494,6 +503,15 @@ mod tests {
         );
         assert!(attachment_file_name("attachment; filename=\"..\"").is_none());
         assert!(attachment_file_name("inline").is_none());
+    }
+
+    #[test]
+    fn zip_tasks_by_returned_id() {
+        assert!(matches!(task_target(&json!("123"), "Zipping "), Target::Id(id) if id == "123"));
+        assert!(matches!(
+            task_target(&Value::Null, "Zipping "),
+            Target::NewTaskWithPrefix(p) if p == "Zipping "
+        ));
     }
 
     #[test]

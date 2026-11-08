@@ -284,7 +284,7 @@ pub enum Target {
     /// A task id, or the UUID of an instance being created or deleted.
     Id(String),
     /// The first task whose name starts with this text and that was not in the buffer when
-    /// waiting began (the core does not return the ids of the tasks it starts).
+    /// waiting began. Only for older cores, whose zip and unzip routes return no task id.
     NewTaskWithPrefix(String),
 }
 
@@ -336,6 +336,22 @@ impl TaskWaiter<'_> {
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = CliResult<T>>,
     {
+        self.wait_for(|_| target, action).await
+    }
+
+    /// Like [`wait`](Self::wait), but the target comes from the action's result (such as a
+    /// task id the request returned).
+    pub async fn wait_for<F, Fut, T>(
+        &self,
+        target_of: impl FnOnce(&T) -> Target,
+        action: F,
+    ) -> CliResult<(T, Task)>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = CliResult<T>>,
+    {
+        let mut target_of = Some(target_of);
+        let mut target: Option<Target> = None;
         let deadline = self.timeout.map(|t| Instant::now() + t);
         let mut backoff = ws::Backoff::new();
         let mut tasks = Tasks::default();
@@ -363,11 +379,16 @@ impl TaskWaiter<'_> {
                 known_before = Some(tasks.tasks.keys().cloned().collect());
             }
             if let Some(action) = action.take() {
-                action_result = Some(action().await?);
+                let result = action().await?;
+                if let Some(target_of) = target_of.take() {
+                    target = Some(target_of(&result));
+                }
+                action_result = Some(result);
             }
             let known = known_before.as_ref().expect("set above");
+            let target = target.as_ref().expect("set with the action's result");
             let pick = |tasks: &Tasks| -> Option<Task> {
-                match &target {
+                match target {
                     Target::Id(id) => tasks.find(id).cloned(),
                     Target::NewTaskWithPrefix(prefix) => tasks
                         .in_order()
@@ -379,7 +400,7 @@ impl TaskWaiter<'_> {
                 if task.ended.is_some() {
                     return finish(action_result, task);
                 }
-            } else if let Target::Id(id) = &target {
+            } else if let Target::Id(id) = target {
                 // the task may have ended long ago and left the buffer
                 if crate::api::resolve::is_instance_uuid(id)
                     && self.conn.get(&["instance", id, "info"]).await.is_ok()

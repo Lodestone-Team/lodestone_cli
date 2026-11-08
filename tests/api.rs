@@ -1098,3 +1098,65 @@ fn create_atom_returns_and_waits_for_the_uuid() {
     assert_eq!(run.json()["uuid"], Value::Null);
     assert!(run.stderr.contains("does not return"), "{}", run.stderr);
 }
+
+/// A core whose zip route answers `zip_reply`; its event stream shows another new zip
+/// failing before the requested one succeeds.
+fn zip_core(zip_reply: Value) -> MockServer {
+    MockServer::start(move |req| match (req.method.as_str(), req.path.as_str()) {
+        ("GET", "/api/v1/instance/list") => Reply::ok(instance_list()),
+        ("PUT", p) if p.ends_with("/fs/zip") => Reply::ok(zip_reply.clone()),
+        ("GET", "/api/v1/events/all/buffer") => Reply::ok(json!([
+            progression(
+                "1",
+                json!({"type": "ProgressionStart", "progression_name": "Zipping world", "total": null, "inner": null})
+            ),
+            progression(
+                "1",
+                json!({"type": "ProgressionEnd", "success": true, "message": "old", "inner": null})
+            ),
+        ])),
+        ("GET", "/api/v1/events/all/stream") => Reply::WebSocket(vec![
+            progression(
+                "556",
+                json!({"type": "ProgressionStart", "progression_name": "Zipping other", "total": null, "inner": null}),
+            ),
+            progression(
+                "555",
+                json!({"type": "ProgressionStart", "progression_name": "Zipping world", "total": null, "inner": null}),
+            ),
+            progression(
+                "556",
+                json!({"type": "ProgressionEnd", "success": false, "message": "Zip failed: other", "inner": null}),
+            ),
+            progression(
+                "555",
+                json!({"type": "ProgressionEnd", "success": true, "message": "Zipped", "inner": null}),
+            ),
+        ]),
+        _ => Reply::error(404, "NotFound", "Not found"),
+    })
+}
+
+#[test]
+fn zip_waits_for_the_task_id_the_core_returns() {
+    let server = zip_core(json!("555"));
+    let cli = Cli::with_env(&server);
+    let run = cli.run(&[
+        "files", "survival", "zip", "world", "-o", "w.zip", "--wait", "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json()["task"]["id"], "555");
+    assert_eq!(run.json()["task"]["state"], "succeeded");
+
+    let run = cli.run(&["files", "survival", "zip", "world", "-o", "w.zip", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json()["task_id"], "555");
+
+    // an older core returns null: the first new zip task is followed instead
+    let old = zip_core(Value::Null);
+    let run = Cli::with_env(&old).run(&[
+        "files", "survival", "zip", "world", "-o", "w.zip", "--wait", "--json",
+    ]);
+    assert_eq!(run.code, 1);
+    assert_eq!(run.error_json()["error"]["kind"], "TaskFailed");
+}
