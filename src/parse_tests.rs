@@ -75,11 +75,11 @@ fn shell_commands(line: &str) -> Vec<Vec<String>> {
 
 /// Every `lodestone_cli` command in the skill file: lines of ```sh blocks (joined at
 /// trailing backslashes) and inline code spans.
-fn skill_examples() -> Vec<Vec<String>> {
+fn skill_examples(skill: &str) -> Vec<Vec<String>> {
     let mut lines = Vec::new();
     let mut in_block = false;
     let mut pending = String::new();
-    for line in SKILL.lines() {
+    for line in skill.lines() {
         if line.trim_start().starts_with("```") {
             in_block = !in_block && line.trim_start() == "```sh";
             continue;
@@ -126,7 +126,9 @@ fn the_command_definitions_are_valid() {
 
 #[test]
 fn every_skill_example_parses() {
-    let examples = skill_examples();
+    let examples = skill_examples(SKILL);
+    // a Windows checkout may give the file CRLF line endings
+    assert_eq!(skill_examples(&SKILL.replace('\n', "\r\n")), examples);
     assert!(
         examples.len() > 80,
         "found only {} examples",

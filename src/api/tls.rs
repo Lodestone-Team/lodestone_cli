@@ -495,6 +495,18 @@ mod tests {
     }
 
     #[test]
+    fn pem_files_with_windows_line_endings_parse() {
+        // a Windows checkout may turn the fixture's line endings into CRLF
+        let pem = include_str!("../../tests/fixtures/test-ca.pem");
+        assert_eq!(parse_pem_certs(pem.as_bytes()).unwrap().len(), 1);
+        let crlf = pem.replace("\r\n", "\n").replace('\n', "\r\n");
+        assert_eq!(
+            parse_pem_certs(crlf.as_bytes()).unwrap(),
+            parse_pem_certs(pem.as_bytes()).unwrap()
+        );
+    }
+
+    #[test]
     fn trust_from_settings() {
         assert_eq!(
             Trust::from_settings(&TlsSettings::default()).unwrap(),
