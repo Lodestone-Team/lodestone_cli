@@ -1,3 +1,4 @@
+mod api;
 mod uninstall;
 mod util;
 mod versions;
@@ -46,10 +47,21 @@ macro_rules! error {
 
 pub(crate) use {error, info};
 
-/// A simple CLI tool to install, update and run the Lodestone Core
+/// A simple CLI tool to install, update and run the Lodestone Core, and to manage a
+/// running core: instances, mods, files, users and more.
+///
+/// Without a subcommand, it installs or updates Lodestone Core (and runs it with
+/// --run-core). With a subcommand, it talks to a running core; see `login` first.
 #[derive(Parser, Debug, Default, Serialize, Deserialize)]
 #[command(author, about, long_about = None)]
 struct Args {
+    /// Manage a running core. Without a subcommand, install, update or run the core.
+    #[command(subcommand)]
+    #[serde(skip)]
+    pub command: Option<api::cli::Command>,
+    #[command(flatten)]
+    #[serde(skip)]
+    pub api: api::cli::GlobalOpts,
     /// Uninstall lodestone
     #[clap(long, short)]
     #[serde(default)]
@@ -171,8 +183,38 @@ async fn self_update() -> Result<()> {
     .unwrap()
 }
 
+/// Parses the command line. Errors in a subcommand's arguments are printed like other
+/// subcommand errors (as JSON with `--json`) and exit with the usage code 2; help and
+/// version requests print as usual.
+fn parse_args() -> Args {
+    match Args::try_parse() {
+        Ok(args) => args,
+        Err(e) => {
+            use clap::error::ErrorKind;
+            let is_subcommand = env::args().skip(1).any(|a| !a.starts_with('-'));
+            let json = env::args().any(|a| a == "--json");
+            if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion)
+                || !is_subcommand
+                || !json
+            {
+                e.exit();
+            }
+            std::process::exit(api::report_usage_error(json, &e.to_string()));
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
+    let parsed = parse_args();
+    if let Some(command) = parsed.command {
+        std::process::exit(api::run(parsed.api, command).await);
+    }
+    if parsed.api.any_set() {
+        error!("--json, --profile, --yes and --verbose only apply to subcommands (see --help)");
+        std::process::exit(2);
+    }
+
     // setup_tracing();
     let _ = color_eyre::install().map_err(|e| error!("color eyre install error {e}"));
 
