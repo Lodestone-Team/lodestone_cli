@@ -1,5 +1,6 @@
 //! The implementation of each API subcommand.
 
+mod api_keys;
 mod auth;
 mod console;
 mod core;
@@ -30,6 +31,7 @@ pub async fn dispatch(ctx: &Ctx, command: Command) -> CliResult<()> {
         Command::Mods(args) => mods::run(ctx, args).await,
         Command::Modrinth(cmd) => mods::modrinth(ctx, cmd).await,
         Command::Users(cmd) => users::run(ctx, cmd).await,
+        Command::ApiKeys(cmd) => api_keys::run(ctx, cmd).await,
         Command::Events(args) => misc::events(ctx, args).await,
         Command::Playit(cmd) => misc::playit(ctx, cmd).await,
         Command::Tasks(args) => misc::tasks(ctx, args).await,

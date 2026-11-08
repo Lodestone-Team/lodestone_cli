@@ -55,12 +55,12 @@ pub fn permission_field(input: &str) -> CliResult<&'static str> {
         })
 }
 
-fn is_instance_permission(field: &str) -> bool {
+pub(super) fn is_instance_permission(field: &str) -> bool {
     INSTANCE_PERMISSIONS.contains(&field)
 }
 
 /// UUIDs for instance names or UUIDs, against the instance list.
-async fn instance_uuids(conn: &Connection, names: &[String]) -> CliResult<Vec<String>> {
+pub(super) async fn instance_uuids(conn: &Connection, names: &[String]) -> CliResult<Vec<String>> {
     let names: Vec<&str> = names
         .iter()
         .flat_map(|n| n.split(','))
