@@ -1174,3 +1174,389 @@ fn extension_manifest_sends_the_url_as_a_query() {
     assert_eq!(run.code, 0, "{}", run.stderr);
     assert_eq!(run.json()["manifest"]["name"], "b");
 }
+
+/* ------------------------------------------------------------- API keys */
+
+const KEY: &str = "lsk_ab12cd34ef56_c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0LXNlY3JldA";
+const KEY_SECRET: &str = "c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0LXNlY3JldA";
+const NEW_KEY: &str = "lsk_zz99yy88xx77_bmV3LWtleS1uZXcta2V5LW5ldy1rZXktbmV3LWtleS1uZXc";
+const NEW_KEY_SECRET: &str = "bmV3LWtleS1uZXcta2V5LW5ldy1rZXktbmV3LWtleS1uZXc";
+
+fn key_info(id: &str, name: &str, scope: Value) -> Value {
+    json!({"id": id, "name": name, "display": format!("lsk_{id}_…"), "uid": "USER_owner",
+           "created_at": 1700000000, "expires_at": null, "last_used_at": null, "scope": scope})
+}
+
+fn session_only() -> Reply {
+    Reply::error(
+        403,
+        "PermissionDenied",
+        "This action needs a signed-in session, not an API key",
+    )
+}
+
+/// A core that accepts the session token `test-token` and the API key `KEY` (which is
+/// refused the session-only routes, as the spec says).
+fn keys_core(req: &Request) -> Reply {
+    let bearer = req.header("authorization").unwrap_or_default().to_string();
+    let is_key = bearer == format!("Bearer {KEY}");
+    if !is_key && bearer != "Bearer test-token" && req.path != "/api/v1/info" {
+        return Reply::error(401, "Unauthorized", "Unauthorized");
+    }
+    let session_only_route = req.path.contains("/api_keys");
+    if is_key && session_only_route {
+        return session_only();
+    }
+    match (req.method.as_str(), req.path.as_str()) {
+        ("GET", "/api/v1/info") => Reply::ok(core_info()),
+        ("GET", "/api/v1/user/info") => Reply::ok(
+            json!({"uid": "USER_owner", "username": "owner", "is_owner": true, "is_admin": false, "permissions": {}}),
+        ),
+        ("GET", "/api/v1/user/list") => Reply::ok(
+            json!([{"uid": "USER_owner", "username": "owner"}, {"uid": "USER_bob", "username": "bob"}]),
+        ),
+        ("GET", "/api/v1/instance/list") => Reply::ok(instance_list()),
+        ("GET", "/api/v1/user/api_keys") => Reply::ok(json!([
+            key_info("ab12cd34ef56", "ci", json!({"type": "full"})),
+            key_info(
+                "qq11ww22ee33",
+                "agent",
+                json!({"type": "custom", "permissions": {"can_view_instance": [SURVIVAL]}})
+            ),
+        ])),
+        ("GET", "/api/v1/user/USER_bob/api_keys") => Reply::ok(json!([key_info(
+            "bb11bb22bb33",
+            "bob's laptop",
+            json!({"type": "full"})
+        )])),
+        ("POST", "/api/v1/user/api_keys") => {
+            let body = req.json();
+            Reply::ok(
+                json!({"key": NEW_KEY, "info": key_info("zz99yy88xx77", body["name"].as_str().unwrap(), body["scope"].clone())}),
+            )
+        }
+        ("DELETE", "/api/v1/user/api_keys/qq11ww22ee33")
+        | ("DELETE", "/api/v1/user/USER_bob/api_keys/bb11bb22bb33") => Reply::ok(Value::Null),
+        // a careless core echoing the key it was given
+        _ if is_key => Reply::error(400, "BadRequest", &format!("bad token {KEY}")),
+        _ => Reply::error(404, "NotFound", "Not found"),
+    }
+}
+
+fn assert_no_secret(run: &common::Run, secret: &str) {
+    assert!(
+        !run.stdout.contains(secret),
+        "stdout shows the key: {}",
+        run.stdout
+    );
+    assert!(
+        !run.stderr.contains(secret),
+        "stderr shows the key: {}",
+        run.stderr
+    );
+}
+
+#[test]
+fn login_with_an_api_key_from_stdin_or_the_environment() {
+    let server = MockServer::start(keys_core);
+    let cli = Cli::new();
+    let run = cli.run_with_stdin(
+        &["login", &server.url(), "--api-key", "--json", "--verbose"],
+        &format!("{KEY}\n"),
+    );
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_no_secret(&run, KEY_SECRET);
+    let doc = run.json();
+    assert_eq!(
+        doc["auth"],
+        json!({"type": "api_key", "key": "lsk_ab12cd34ef56_…"})
+    );
+    assert_eq!(doc["user"]["username"], "owner");
+    let info = server.requests_to("GET", "/api/v1/user/info");
+    assert_eq!(
+        info[0].header("authorization"),
+        Some(format!("Bearer {KEY}").as_str())
+    );
+    // no password login happened
+    assert!(server.requests_to("POST", "/api/v1/user/login").is_empty());
+
+    let saved: Value =
+        serde_json::from_str(&std::fs::read_to_string(cli.profiles_path()).unwrap()).unwrap();
+    assert_eq!(saved["profiles"]["default"]["token"], KEY);
+    assert_eq!(saved["profiles"]["default"]["auth"], "api_key");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(cli.profiles_path())
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+
+    for args in [
+        &["profile", "list", "--json"][..],
+        &["profile", "list"],
+        &["instance", "list", "--verbose"],
+    ] {
+        let run = cli.run(args);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        assert_no_secret(&run, KEY_SECRET);
+    }
+    let run = cli.run(&["profile", "list", "--json"]);
+    assert_eq!(run.json()[0]["auth"]["key"], "lsk_ab12cd34ef56_…");
+    let list = server.requests_to("GET", "/api/v1/instance/list");
+    assert_eq!(
+        list.last().unwrap().header("authorization"),
+        Some(format!("Bearer {KEY}").as_str())
+    );
+
+    // from LODESTONE_API_KEY, with stdin left alone
+    let mut cli = Cli::new();
+    cli.env.push(("LODESTONE_API_KEY".into(), KEY.into()));
+    let run = cli.run(&["login", &server.url(), "--api-key", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_no_secret(&run, KEY_SECRET);
+}
+
+#[test]
+fn a_refused_or_malformed_key_is_never_echoed() {
+    let server = MockServer::start(keys_core);
+    let wrong = "lsk_ab12cd34ef56_d3Jvbmctd3Jvbmctd3Jvbmctd3Jvbmctd3Jvbmctd3Jvbmc";
+    let run = Cli::new().run_with_stdin(
+        &["login", &server.url(), "--api-key", "--json"],
+        &format!("{wrong}\n"),
+    );
+    assert_eq!(run.code, 3);
+    assert_no_secret(&run, "d3Jvbmc");
+    let message = run.error_json()["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(message.contains("lsk_ab12cd34ef56_…"), "{message}");
+
+    // a password typed by mistake is not echoed either
+    let run = Cli::new().run_with_stdin(
+        &["login", &server.url(), "--api-key", "--json"],
+        "hunter2\n",
+    );
+    assert_eq!(run.code, 2);
+    assert_no_secret(&run, "hunter2");
+
+    // the key cannot be a command line argument
+    let run = Cli::new().run(&["login", &server.url(), "--api-key", KEY]);
+    assert_eq!(run.code, 2);
+
+    // a key echoed back in a core's error message is redacted
+    let mut cli = Cli::with_env(&server);
+    cli.env.retain(|(k, _)| k != "LODESTONE_TOKEN");
+    cli.env.push(("LODESTONE_TOKEN".into(), KEY.into()));
+    let run = cli.run(&["files", "--global", "cat", "/x", "--json"]);
+    assert_eq!(run.code, 1);
+    assert_no_secret(&run, KEY_SECRET);
+    assert_eq!(
+        run.error_json()["error"]["message"],
+        "bad token lsk_ab12cd34ef56_…"
+    );
+    let run = cli.run(&["files", "--global", "cat", "/x", "--verbose"]);
+    assert_no_secret(&run, KEY_SECRET);
+    assert!(
+        run.stderr.contains("bad token lsk_ab12cd34ef56_…"),
+        "{}",
+        run.stderr
+    );
+}
+
+#[test]
+fn api_keys_list_create_and_revoke_with_a_session() {
+    let server = MockServer::start(keys_core);
+    let cli = Cli::with_env(&server);
+
+    let run = cli.run(&["api-keys", "list", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json()[1]["name"], "agent");
+    let run = cli.run(&["api-keys", "list"]);
+    assert!(
+        run.stdout.contains("Full access")
+            && run.stdout.contains("Custom: 1 instance, 1 permission"),
+        "{}",
+        run.stdout
+    );
+    let run = cli.run(&["api-keys", "list", "--user", "bob", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json()[0]["id"], "bb11bb22bb33");
+
+    // create: the key is printed exactly once, on stdout
+    for json_flag in [true, false] {
+        let mut args = vec![
+            "api-keys",
+            "create",
+            "--name",
+            "ci",
+            "--full",
+            "--expires",
+            "never",
+        ];
+        if json_flag {
+            args.push("--json");
+        }
+        let run = cli.run(&args);
+        assert_eq!(run.code, 0, "{}", run.stderr);
+        assert_eq!(
+            run.stdout.matches(NEW_KEY_SECRET).count(),
+            1,
+            "{}",
+            run.stdout
+        );
+        assert!(!run.stderr.contains(NEW_KEY_SECRET), "{}", run.stderr);
+        assert!(run.stderr.contains("shown only once"), "{}", run.stderr);
+        if json_flag {
+            assert_eq!(run.json()["key"], NEW_KEY);
+        }
+    }
+    let create = server.requests_to("POST", "/api/v1/user/api_keys");
+    assert_eq!(
+        create[0].json(),
+        json!({"name": "ci", "expires_at": null, "scope": {"type": "full"}})
+    );
+
+    // a custom scope, in the style of `users perms set`
+    let before = chrono_now();
+    let run = cli.run(&[
+        "api-keys",
+        "create",
+        "--name",
+        "agent",
+        "--expires",
+        "30d",
+        "--allow",
+        "view_instance=survival,creative",
+        "--allow",
+        "start_instance=survival",
+        "--allow",
+        "can_create_instance=true",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let body = server
+        .requests_to("POST", "/api/v1/user/api_keys")
+        .last()
+        .unwrap()
+        .json();
+    let permissions = &body["scope"]["permissions"];
+    assert_eq!(body["scope"]["type"], "custom");
+    assert_eq!(
+        permissions["can_view_instance"],
+        json!([SURVIVAL, "INSTANCE_22222222-bbbb"])
+    );
+    assert_eq!(permissions["can_start_instance"], json!([SURVIVAL]));
+    assert_eq!(permissions["can_stop_instance"], json!([]));
+    assert_eq!(permissions["can_create_instance"], true);
+    assert_eq!(permissions["can_delete_instance"], false);
+    let expires = body["expires_at"].as_i64().unwrap();
+    assert!(
+        (before + 30 * 86400..=chrono_now() + 30 * 86400).contains(&expires),
+        "{expires}"
+    );
+
+    assert_eq!(
+        cli.run(&["api-keys", "create", "--name", "x"]).code,
+        2,
+        "a scope is required"
+    );
+    assert_eq!(
+        cli.run(&[
+            "api-keys",
+            "create",
+            "--name",
+            "x",
+            "--full",
+            "--allow",
+            "view_instance=a"
+        ])
+        .code,
+        2
+    );
+
+    // revoke confirms first
+    let run = cli.run(&["api-keys", "revoke", "lsk_qq11ww22ee33_…", "--json"]);
+    assert_eq!(run.code, 1);
+    assert_eq!(run.error_json()["error"]["kind"], "ConfirmationRequired");
+    assert!(server.requests().iter().all(|r| r.method != "DELETE"));
+    let run = cli.run(&[
+        "api-keys",
+        "revoke",
+        "lsk_qq11ww22ee33_…",
+        "--yes",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        run.json(),
+        json!({"ok": true, "id": "qq11ww22ee33", "name": "agent"})
+    );
+    let run = cli.run(&[
+        "api-keys",
+        "revoke",
+        "--user",
+        "bob",
+        "bb11bb22bb33",
+        "--yes",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        server
+            .requests_to("DELETE", "/api/v1/user/USER_bob/api_keys/bb11bb22bb33")
+            .len(),
+        1
+    );
+    let run = cli.run(&["api-keys", "revoke", "nothere12345", "--yes", "--json"]);
+    assert_eq!(run.code, 1);
+    assert_eq!(run.error_json()["error"]["kind"], "NotFound");
+}
+
+fn chrono_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
+}
+
+#[test]
+fn api_key_logins_get_the_session_only_message_with_a_hint() {
+    let server = MockServer::start(keys_core);
+    let mut cli = Cli::new();
+    cli.env.push(("LODESTONE_URL".into(), server.url()));
+    cli.env.push(("LODESTONE_TOKEN".into(), KEY.into()));
+    for args in [
+        &["api-keys", "list", "--json"][..],
+        &["api-keys", "create", "--name", "x", "--full", "--json"],
+        &["api-keys", "revoke", "qq11ww22ee33", "--yes", "--json"],
+    ] {
+        let run = cli.run(args);
+        assert_eq!(run.code, 1, "{args:?}: {}", run.stderr);
+        let error = run.error_json();
+        assert_eq!(error["error"]["kind"], "PermissionDenied");
+        let message = error["error"]["message"].as_str().unwrap();
+        assert!(message.contains("needs a signed-in session"), "{message}");
+        assert!(message.contains("log in with a password"), "{message}");
+        assert_no_secret(&run, KEY_SECRET);
+    }
+    // other commands work with the key
+    let run = cli.run(&["instance", "list", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+
+    // a revoked key gets its own hint
+    let mut revoked = Cli::new();
+    revoked.env.push(("LODESTONE_URL".into(), server.url()));
+    revoked.env.push(("LODESTONE_TOKEN".into(), NEW_KEY.into()));
+    let run = revoked.run(&["instance", "list", "--json"]);
+    assert_eq!(run.code, 3);
+    assert!(run.error_json()["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("revoked"));
+    assert_no_secret(&run, NEW_KEY_SECRET);
+}

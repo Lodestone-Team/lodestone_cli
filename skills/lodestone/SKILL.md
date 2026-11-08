@@ -8,13 +8,42 @@ description: Manage Lodestone game servers with the `lodestone_cli` command line
 `lodestone_cli` talks to a running Lodestone Core over its REST and WebSocket API. It can do
 everything the Lodestone dashboard can. Add `--help` to any command to see all its options.
 
-## Install and log in
+## Install and authenticate
 
 Download the binary for your platform from
 https://github.com/Lodestone-Team/lodestone_cli/releases. Without a subcommand the same binary
 installs and runs Lodestone Core itself; this skill only uses the subcommands.
 
-Log in once; the login is saved as a profile:
+### Agents: use an API key that the user gives you
+
+Authenticate with an **API key**, not with the user's password. The user creates a key for
+you, limited to what you need (a *custom* scope: some instances and some actions, and an
+expiry), in the dashboard (User settings, API keys) or with `api-keys create`. They put it in
+your environment, together with the core's URL and, for the default self-signed certificate,
+its fingerprint:
+
+- `LODESTONE_URL`: the core, such as `https://192.168.1.20:16662`;
+- `LODESTONE_TOKEN`: the key (`lsk_...`). It takes any bearer token, so keys work there;
+- `LODESTONE_FINGERPRINT`: the certificate's SHA-256 fingerprint (or `LODESTONE_CA_CERT`).
+
+Then every command just works, with no login step:
+
+```sh
+lodestone_cli --json users me
+lodestone_cli --json instance list
+```
+
+- **Never print, store or echo the key.** Do not `echo` it, write it to a file, put it on a
+  command line or in a message. The CLI itself only ever shows keys as `lsk_<id>_…`.
+- **Never create, revoke or ask for keys on your own initiative**, and do not ask for the
+  user's password instead. If the key lacks a permission (kind `PermissionDenied`), tell the
+  user which one and let them decide.
+- A key that was revoked or has expired fails with exit code 3 and kind `Unauthorized`; ask
+  the user for a new one.
+
+### People: log in once and save a profile
+
+Log in with a password; the login is saved as a profile:
 
 ```sh
 lodestone_cli login https://192.168.1.20:16662 --username alice
@@ -28,6 +57,9 @@ lodestone_cli login https://192.168.1.20:16662 --username alice
 printf '%s\n' "$LODESTONE_PASSWORD" | lodestone_cli login 192.168.1.20 --username alice --password-stdin
 ```
 
+- Or save an API key as a profile: `lodestone_cli login 192.168.1.20 --api-key` reads the
+  key from `LODESTONE_API_KEY`, or from stdin (without echo on a terminal). The key is never
+  a command line argument. Managing keys and changing passwords need a password login.
 - Cores use a self-signed certificate by default. On the first login the CLI shows its SHA-256
   fingerprint (such as `AB:CD:...`) and asks the user to compare it with the fingerprint in the
   core's log or in Core Settings on the dashboard. Without a terminal it refuses and prints the
@@ -42,8 +74,9 @@ lodestone_cli login 192.168.1.20 --username alice --password-stdin --fingerprint
   instead. Certificate checks cannot be turned off.
 - Profiles: `lodestone_cli profile list`, `lodestone_cli profile use home`,
   `lodestone_cli logout`. Pick one per command with `--profile home`.
-- For CI and agents, environment variables override the profile: `LODESTONE_URL`,
-  `LODESTONE_TOKEN`, and for TLS `LODESTONE_FINGERPRINT` or `LODESTONE_CA_CERT` (a PEM file).
+- Environment variables override the profile: `LODESTONE_URL`, `LODESTONE_TOKEN` (a session
+  token or an API key), and for TLS `LODESTONE_FINGERPRINT` or `LODESTONE_CA_CERT` (a PEM
+  file).
 - A brand-new core has no owner yet: `lodestone_cli core setup 192.168.1.20 SETUP_KEY --username alice`
   creates the owner with the setup key from the core's log, and logs in.
 
@@ -216,6 +249,23 @@ Per-instance permissions: `view_instance`, `start_instance`, `stop_instance`,
 `delete_instance`, `read_global_file`, `write_global_file`, `manage_permission`,
 `install_extension`. The `can_` prefix is optional.
 
+API keys (for the user; these need a password login, and agents never run them on their own
+initiative):
+
+```sh
+lodestone_cli --json api-keys list
+lodestone_cli --json api-keys create --name agent --expires 30d --allow view_instance=survival --allow start_instance=survival --allow access_instance_console=survival
+lodestone_cli --json api-keys create --name ci --full --expires 90d
+lodestone_cli --json api-keys revoke lsk_ab12cd34ef56_… --yes
+lodestone_cli --json api-keys list --user bob
+```
+
+- `--allow PERMISSION=VALUE` takes the permissions of `users perms set`, repeated: instance
+  names for per-instance permissions, `true` for the others. `--full` gives everything the
+  user can do. `--expires` is `30d`, `90d` (default), `1y` or `never`.
+- `create` prints the key once (in `key` with `--json`) and never again.
+- With an API key login, these fail with "needs a signed-in session".
+
 Events, tasks, playit.gg:
 
 ```sh
@@ -285,9 +335,10 @@ lodestone_cli --json users perms get bob
 - **Starting a Minecraft server accepts Mojang's EULA** (https://aka.ms/MinecraftEULA). Only
   the user can agree to it. Ask before the first `instance start`, `restart` or a creation
   with `--auto-start`, and never write `eula=true` yourself.
-- **Never print or store tokens or passwords** in files, logs or messages the user did not ask
-  for. Pass passwords through stdin or environment variables, not command line arguments.
-  Never confirm a TLS fingerprint on the user's behalf.
+- **Authenticate with the API key the user gave you** (`LODESTONE_URL` and `LODESTONE_TOKEN`),
+  not with their password. **Never print, store or echo keys, tokens or passwords**, never
+  pass them as command line arguments, and never create or revoke API keys unless the user
+  asks. Never confirm a TLS fingerprint on the user's behalf.
 - **Macros and atom instances are owner only**, and also need code execution to be on. A
   `PermissionDenied` error for them is expected for other users; do not try to work around it.
 - Prefer `--wait` and `tasks --wait` over polling, and use `--timeout` so a command cannot run

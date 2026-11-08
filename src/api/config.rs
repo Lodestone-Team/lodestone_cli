@@ -27,10 +27,22 @@ pub struct TlsSettings {
     pub ca_cert_pem: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// What a profile's token is.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthKind {
+    /// A session token from a password login (profiles from before API keys are these).
+    #[default]
+    Session,
+    /// An API key (`lsk_...`) from `login --api-key`.
+    ApiKey,
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Profile {
     /// The core's base URL, such as `https://192.168.1.20:16662`, without `/api/v1`.
     pub url: String,
+    /// The session token or API key. Never printed, not even by `Debug`.
     pub token: String,
     #[serde(default)]
     pub username: String,
@@ -38,6 +50,25 @@ pub struct Profile {
     pub uid: String,
     #[serde(default)]
     pub tls: TlsSettings,
+    #[serde(default)]
+    pub auth: AuthKind,
+}
+
+impl std::fmt::Debug for Profile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let token = match self.auth {
+            AuthKind::ApiKey => super::keys::display(&self.token),
+            AuthKind::Session => "…".to_string(),
+        };
+        f.debug_struct("Profile")
+            .field("url", &self.url)
+            .field("token", &token)
+            .field("username", &self.username)
+            .field("uid", &self.uid)
+            .field("tls", &self.tls)
+            .field("auth", &self.auth)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,7 +222,28 @@ mod tests {
                 pinned_sha256: Some("AB:CD".to_string()),
                 ca_cert_pem: None,
             },
+            auth: AuthKind::Session,
         }
+    }
+
+    #[test]
+    fn old_profiles_are_sessions_and_debug_hides_tokens() {
+        let old: Profile =
+            serde_json::from_str(r#"{"url": "https://h", "token": "jwt-secret"}"#).unwrap();
+        assert_eq!(old.auth, AuthKind::Session);
+        assert!(!format!("{old:?}").contains("jwt-secret"));
+        let key = Profile {
+            token: "lsk_ab12cd34ef56_c2VjcmV0c2VjcmV0c2VjcmV0".into(),
+            auth: AuthKind::ApiKey,
+            ..old
+        };
+        let debug = format!("{key:?}");
+        assert!(debug.contains("lsk_ab12cd34ef56_…"), "{debug}");
+        assert!(!debug.contains("c2Vj"), "{debug}");
+        assert_eq!(
+            serde_json::to_value(&key).unwrap()["auth"],
+            serde_json::json!("api_key")
+        );
     }
 
     #[test]

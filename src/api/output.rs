@@ -6,6 +6,7 @@ use std::io::Write;
 use serde_json::Value;
 
 use super::error::CliError;
+use super::keys::redact;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Output {
@@ -51,19 +52,26 @@ impl Output {
         }
     }
 
-    /// A note for people, on stderr. Not printed with `--json`.
+    /// A note for people, on stderr. Not printed with `--json`. API keys in it are
+    /// redacted, like everything else on stderr.
     pub fn note(&self, message: impl AsRef<str>) {
         if !self.json {
-            eprintln!("{}", message.as_ref());
+            eprintln!("{}", redact(message.as_ref()));
         }
     }
 
     /// A warning on stderr, printed in both modes (stderr is never parsed).
     pub fn warn(&self, message: impl AsRef<str>) {
-        eprintln!("warning: {}", message.as_ref());
+        eprintln!("warning: {}", redact(message.as_ref()));
     }
 
+    /// An error on stderr. API keys in it (for example echoed back by the core) are
+    /// redacted.
     pub fn error(&self, error: &CliError) {
+        let error = CliError {
+            message: redact(&error.message),
+            ..error.clone()
+        };
         if self.json {
             let mut stderr = std::io::stderr().lock();
             let _ = serde_json::to_writer(&mut stderr, &error.to_json());

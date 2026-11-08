@@ -39,6 +39,7 @@ lodestone_cli console survival --follow
 | `mods`, `modrinth` | Mods and plugins from Modrinth or uploaded jars; Modrinth search |
 | `macros` | Run and configure macros (owner only) |
 | `users` | Users, passwords and permissions |
+| `api-keys` | Create, list and revoke API keys |
 | `events`, `tasks` | Notifications, live events, and waiting for background tasks |
 | `playit`, `extension` | playit.gg tunnels and extensions (owner only) |
 
@@ -47,6 +48,11 @@ Run `lodestone_cli <command> --help` for the details.
 - **Scripts and agents:** add `--json` for machine-readable output. Exit codes are 0 for
   success, 1 for an error from the core, 2 for a wrong command line and 3 when not logged in.
   `LODESTONE_URL` and `LODESTONE_TOKEN` override the saved login.
+- **API keys:** give scripts, CI and agents a named, limited, expiring key instead of your
+  password: `lodestone_cli api-keys create --name ci --allow view_instance=survival` prints
+  it once. Use it as `LODESTONE_TOKEN`, or save it with `lodestone_cli login <url> --api-key`
+  (it reads the key from stdin or `LODESTONE_API_KEY`). `api-keys list` and `api-keys revoke`
+  manage them; keys are only ever shown as `lsk_<id>_…`.
 - **Certificates:** cores use a self-signed certificate. On the first login the CLI shows its
   SHA-256 fingerprint; compare it with the one in the core's log or Core Settings. After that
   the login accepts only that certificate. `--fingerprint` and `--ca-cert` do the same without

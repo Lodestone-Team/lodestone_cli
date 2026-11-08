@@ -153,6 +153,10 @@ impl Connection {
         self.token.as_deref()
     }
 
+    pub fn set_token(&mut self, token: String) {
+        self.token = Some(token);
+    }
+
     /// The URL of an API route: the base URL, `/api/v1`, then `segments`, each
     /// percent-encoded as one path segment.
     pub fn api_url(&self, segments: &[&str]) -> Url {
@@ -178,7 +182,9 @@ impl Connection {
                 .extend_pairs(query.iter().map(|(k, v)| (*k, v.as_str())));
         }
         if self.verbose {
-            eprintln!("> {method} {}", url.path());
+            // the path only: never the query (the event stream filter holds a token there)
+            // or a header
+            eprintln!("> {method} {}", crate::api::keys::redact(url.path()));
         }
         let mut builder = self.client.request(method, url);
         if let Some(token) = &self.token {

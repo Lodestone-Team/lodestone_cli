@@ -61,6 +61,10 @@ pub enum Command {
     /// Users and their permissions.
     #[command(subcommand)]
     Users(UsersCmd),
+    /// API keys: named, limited, expiring credentials for scripts and agents. Needs a
+    /// password login.
+    #[command(subcommand, name = "api-keys")]
+    ApiKeys(ApiKeysCmd),
     /// Notifications (events), or the live event stream with --follow.
     Events(EventsArgs),
     /// The playit.gg tunnel (owner only).
@@ -96,6 +100,11 @@ pub struct ConnectArgs {
 pub struct LoginArgs {
     /// The core's address: host, host:port or a URL. Defaults to https and port 16662.
     pub url: String,
+    /// Log in with an API key instead of a password. The key is read from
+    /// LODESTONE_API_KEY, else from stdin (asked for without echo on a terminal); it is
+    /// never a command line argument.
+    #[arg(long, conflicts_with_all = ["username", "password_stdin"])]
+    pub api_key: bool,
     #[command(flatten)]
     pub connect: ConnectArgs,
 }
@@ -789,6 +798,69 @@ pub enum PermsCmd {
         #[arg(required = true)]
         instances: Vec<String>,
     },
+}
+
+/* ------------------------------------------------------------- api keys */
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum ApiKeysCmd {
+    /// List your API keys, or another user's with --user (owner or admin).
+    List {
+        #[arg(long)]
+        user: Option<String>,
+    },
+    /// Create an API key for yourself. The key is printed once; store it safely.
+    Create(CreateKeyArgs),
+    /// Revoke an API key. Its other keys and the user's sessions keep working.
+    Revoke {
+        /// Revoke a key of this user (owner or admin).
+        #[arg(long)]
+        user: Option<String>,
+        /// The key's id, or its `lsk_<id>_…` form.
+        id: String,
+    },
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyExpiry {
+    #[value(name = "30d")]
+    Days30,
+    #[value(name = "90d")]
+    Days90,
+    #[value(name = "1y")]
+    Year,
+    Never,
+}
+
+impl KeyExpiry {
+    /// Seconds until the key expires, or `None` for never.
+    pub fn seconds(self) -> Option<i64> {
+        const DAY: i64 = 86400;
+        match self {
+            KeyExpiry::Days30 => Some(30 * DAY),
+            KeyExpiry::Days90 => Some(90 * DAY),
+            KeyExpiry::Year => Some(365 * DAY),
+            KeyExpiry::Never => None,
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+#[command(group(clap::ArgGroup::new("scope").required(true).args(["full", "allow"])))]
+pub struct CreateKeyArgs {
+    /// A name that says what the key is for, such as `ci` or `claude agent`.
+    #[arg(long)]
+    pub name: String,
+    #[arg(long, value_enum, default_value = "90d")]
+    pub expires: KeyExpiry,
+    /// Everything you can do, including owner or admin powers if you have them.
+    #[arg(long, conflicts_with = "allow")]
+    pub full: bool,
+    /// Allow one permission, as in `users perms set`: PERMISSION=INSTANCES for a
+    /// per-instance permission (comma-separated names or UUIDs), PERMISSION=true for one
+    /// of the whole core. Repeat for more. The key can never do more than you can.
+    #[arg(long, value_name = "PERMISSION=VALUE")]
+    pub allow: Vec<String>,
 }
 
 /* --------------------------------------------------------------- events */

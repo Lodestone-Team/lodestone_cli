@@ -4,12 +4,14 @@ use reqwest::Url;
 use serde_json::{json, Value};
 
 use crate::api::cli::{ConnectArgs, LoginArgs, LogoutArgs, ProfileCmd, SetupArgs};
-use crate::api::config::{Profile, Profiles, TlsSettings, DEFAULT_PROFILE};
-use crate::api::error::{kind, CliError, CliResult};
+use std::io::IsTerminal;
+
+use crate::api::config::{AuthKind, Profile, Profiles, TlsSettings, DEFAULT_PROFILE};
+use crate::api::error::{kind, CliError, CliResult, ExitCode};
 use crate::api::http::{self, Body, Connection};
 use crate::api::output::Table;
 use crate::api::tls::{self, Trust};
-use crate::api::{prompt, warn_plain_http, Ctx, ENV_PASSWORD, ENV_USERNAME};
+use crate::api::{keys, prompt, warn_plain_http, Ctx, ENV_API_KEY, ENV_PASSWORD, ENV_USERNAME};
 
 /// Decides how to trust the core at `url` before sending it a password: `--ca-cert`,
 /// `--fingerprint`, the pin of an existing profile for the same URL, the system's trust,
@@ -176,12 +178,22 @@ fn tls_json(settings: &TlsSettings) -> Value {
     }
 }
 
-/// Saves a login reply (`LoginReply`) as a profile and makes it the current one.
+/// How a profile authenticates, for `profile list` and login results. Never the key itself.
+fn auth_json(auth: AuthKind, token: &str) -> Value {
+    match auth {
+        AuthKind::Session => json!({"type": "session"}),
+        AuthKind::ApiKey => json!({"type": "api_key", "key": keys::display(token)}),
+    }
+}
+
+/// Saves a login reply (`LoginReply`: a token and the user) as a profile and makes it the
+/// current one.
 fn save_login(
     ctx: &Ctx,
     url: &Url,
     reply: &Value,
     settings: TlsSettings,
+    auth: AuthKind,
     action: &str,
 ) -> CliResult<()> {
     let token = reply["token"]
@@ -199,17 +211,23 @@ fn save_login(
             username: username.clone(),
             uid: user["uid"].as_str().unwrap_or_default().to_string(),
             tls: settings.clone(),
+            auth,
         },
     );
     profiles.current = Some(name.clone());
     profiles.save()?;
+    let with = match auth {
+        AuthKind::Session => String::new(),
+        AuthKind::ApiKey => format!(" with API key {}", keys::display(token)),
+    };
     ctx.out.done(
-        format!("{action} {url} as {username}; saved as profile `{name}`"),
+        format!("{action} {url} as {username}{with}; saved as profile `{name}`"),
         json!({
             "profile": name,
             "url": url.as_str().trim_end_matches('/'),
             "user": user,
             "tls": tls_json(&settings),
+            "auth": auth_json(auth, token),
         }),
     );
     Ok(())
@@ -234,10 +252,58 @@ pub async fn login(ctx: &Ctx, args: LoginArgs) -> CliResult<()> {
             ),
         ));
     }
+    if args.api_key {
+        let key = api_key()?;
+        let mut conn = conn;
+        conn.set_token(key.clone());
+        let user = conn.get(&["user", "info"]).await.map_err(|mut e| {
+            if e.exit == ExitCode::Auth {
+                e.message = format!(
+                    "The core refused API key {}: it is wrong, expired or revoked",
+                    keys::display(&key)
+                );
+            }
+            e
+        })?;
+        let reply = json!({"token": key, "user": user});
+        return save_login(
+            ctx,
+            &url,
+            &reply,
+            settings,
+            AuthKind::ApiKey,
+            "Logged in to",
+        );
+    }
     let username = username(&args.connect)?;
     let password = password(&args.connect, "Password")?;
     let reply = conn.login(&username, &password).await?;
-    save_login(ctx, &url, &reply, settings, "Logged in to")
+    save_login(
+        ctx,
+        &url,
+        &reply,
+        settings,
+        AuthKind::Session,
+        "Logged in to",
+    )
+}
+
+/// The API key for `login --api-key`: `LODESTONE_API_KEY`, else the first line of stdin
+/// (asked for without echo on a terminal).
+fn api_key() -> CliResult<String> {
+    let key = match std::env::var(ENV_API_KEY) {
+        Ok(key) if !key.trim().is_empty() => key,
+        _ if std::io::stdin().is_terminal() => prompt::ask_secret("API key")?,
+        _ => prompt::read_secret_from_stdin()?,
+    };
+    let key = key.trim().to_string();
+    if !keys::is_api_key(&key) || keys::key_id(&key).is_none() {
+        // never echo what was given: it may be a password or a token
+        return Err(CliError::usage(
+            "That is not a Lodestone API key (they start with lsk_)",
+        ));
+    }
+    Ok(key)
 }
 
 pub async fn setup(ctx: &Ctx, args: SetupArgs) -> CliResult<()> {
@@ -271,7 +337,7 @@ pub async fn setup(ctx: &Ctx, args: SetupArgs) -> CliResult<()> {
             Body::Json(json!({ "username": username, "password": password })),
         )
         .await?;
-    save_login(ctx, &url, &reply, settings, "Set up")
+    save_login(ctx, &url, &reply, settings, AuthKind::Session, "Set up")
 }
 
 pub async fn logout(ctx: &Ctx, args: LogoutArgs) -> CliResult<()> {
@@ -284,6 +350,7 @@ pub async fn logout(ctx: &Ctx, args: LogoutArgs) -> CliResult<()> {
         ));
     };
     if args.revoke {
+        ctx.credential.set(Some(profile.auth));
         let url = http::parse_core_url(&profile.url)?;
         let trust = Trust::from_settings(&profile.tls)?;
         let conn = Connection::new(url, Some(profile.token.clone()), trust, ctx.global.verbose)?;
@@ -329,11 +396,12 @@ pub fn profile(ctx: &Ctx, cmd: ProfileCmd) -> CliResult<()> {
                         "username": p.username,
                         "current": *name == current,
                         "tls": tls_json(&p.tls),
+                        "auth": auth_json(p.auth, &p.token),
                     })
                 })
                 .collect();
             ctx.out.show(&json!(list), || {
-                let mut table = Table::new(["", "NAME", "URL", "USER", "TLS"]);
+                let mut table = Table::new(["", "NAME", "URL", "USER", "LOGIN", "TLS"]);
                 for (name, p) in &profiles.profiles {
                     let tls = match (&p.tls.pinned_sha256, &p.tls.ca_cert_pem) {
                         (Some(_), _) => "pinned certificate",
@@ -345,11 +413,16 @@ pub fn profile(ctx: &Ctx, cmd: ProfileCmd) -> CliResult<()> {
                     } else {
                         tls
                     };
+                    let login = match p.auth {
+                        AuthKind::Session => "password".to_string(),
+                        AuthKind::ApiKey => format!("API key {}", keys::display(&p.token)),
+                    };
                     table.row([
                         if *name == current { "*" } else { "" },
                         name,
                         &p.url,
                         &p.username,
+                        &login,
                         tls,
                     ]);
                 }
