@@ -125,6 +125,31 @@ fn the_command_definitions_are_valid() {
 }
 
 #[test]
+fn trace_watch_takes_patterns() {
+    use crate::api::cli::TraceCmd;
+    let args = parse(&[
+        "trace",
+        "watch",
+        "log.warn",
+        "*.error",
+        "--backlog",
+        "5",
+        "--count",
+        "3",
+    ])
+    .unwrap();
+    let Some(Command::Trace(TraceCmd::Watch(watch))) = args.command else {
+        panic!("not trace watch")
+    };
+    assert_eq!(watch.topics, ["log.warn", "*.error"]);
+    assert_eq!((watch.backlog, watch.count), (5, Some(3)));
+    assert!(matches!(
+        parse(&["trace", "snapshot"]).unwrap().command,
+        Some(Command::Trace(TraceCmd::Snapshot))
+    ));
+}
+
+#[test]
 fn every_skill_example_parses() {
     let examples = skill_examples(SKILL);
     // a Windows checkout may give the file CRLF line endings

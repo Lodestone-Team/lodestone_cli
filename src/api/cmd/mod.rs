@@ -9,6 +9,7 @@ mod instance;
 mod macros;
 mod misc;
 mod mods;
+mod trace;
 mod users;
 pub(crate) mod values;
 
@@ -36,5 +37,6 @@ pub async fn dispatch(ctx: &Ctx, command: Command) -> CliResult<()> {
         Command::Playit(cmd) => misc::playit(ctx, cmd).await,
         Command::Tasks(args) => misc::tasks(ctx, args).await,
         Command::Extension(cmd) => misc::extension(ctx, cmd).await,
+        Command::Trace(cmd) => trace::run(ctx, cmd).await,
     }
 }
