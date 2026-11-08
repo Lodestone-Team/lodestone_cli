@@ -935,18 +935,9 @@ fn tls_login_with_a_ca_certificate() {
 }
 
 #[test]
-fn plain_http_to_another_machine_warns() {
-    // the warning comes before any request; the bad permission name stops the command
-    // before it connects
-    let mut cli = Cli::new();
-    cli.env
-        .push(("LODESTONE_URL".into(), "http://192.0.2.1:9".into()));
-    cli.env.push(("LODESTONE_TOKEN".into(), "t".into()));
-    let run = cli.run(&["users", "perms", "set", "bob", "fly", "true", "--json"]);
-    assert_eq!(run.code, 2);
-    assert!(run.stderr.contains("plain HTTP"), "{}", run.stderr);
-
-    // loopback is fine
+fn verbose_shows_requests_but_never_the_token() {
+    // the plain HTTP warning for other machines is tested in the unit tests, so this test
+    // only talks to the loopback mock core
     let server = MockServer::start(basic_core);
     let run = Cli::with_env(&server).run(&["core", "info", "--json", "--verbose"]);
     assert_eq!(run.code, 0, "{}", run.stderr);

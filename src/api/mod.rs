@@ -112,11 +112,18 @@ impl Ctx {
 /// Warns that a plain `http://` URL to another machine sends passwords and tokens
 /// unencrypted.
 pub fn warn_plain_http(out: &Output, url: &reqwest::Url) {
-    if url.scheme() == "http" && !http::is_loopback_host(url) {
-        out.warn(format!(
-            "{url} uses plain HTTP: passwords and tokens cross the network unencrypted. Use https:// (cores refuse plain HTTP from other devices by default)."
-        ));
+    if let Some(warning) = plain_http_warning(url) {
+        out.warn(warning);
     }
+}
+
+/// The warning for a plain `http://` URL to another machine, if `url` is one.
+pub fn plain_http_warning(url: &reqwest::Url) -> Option<String> {
+    (url.scheme() == "http" && !http::is_loopback_host(url)).then(|| {
+        format!(
+            "{url} uses plain HTTP: passwords and tokens cross the network unencrypted. Use https:// (cores refuse plain HTTP from other devices by default)."
+        )
+    })
 }
 
 /// Runs an API subcommand and returns the process exit code.
@@ -140,4 +147,30 @@ pub fn report_usage_error(json: bool, message: &str) -> i32 {
     let error = CliError::usage(message.trim().to_string());
     Output { json }.error(&error);
     ExitCode::Usage as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn plain_http_warns_only_for_other_machines() {
+        let warning = |url: &str| plain_http_warning(&reqwest::Url::parse(url).unwrap());
+        for other in [
+            "http://192.0.2.1:16662",
+            "http://core.example:16662",
+            "http://[2001:db8::1]",
+        ] {
+            let text = warning(other).unwrap_or_else(|| panic!("{other} should warn"));
+            assert!(text.contains("plain HTTP"), "{text}");
+        }
+        for fine in [
+            "http://127.0.0.1:16662",
+            "http://localhost:16662",
+            "http://[::1]:16662",
+            "https://192.0.2.1:16662",
+        ] {
+            assert_eq!(warning(fine), None, "{fine}");
+        }
+    }
 }
