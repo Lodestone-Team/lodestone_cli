@@ -45,7 +45,10 @@ pub fn get_executable_name(version: &VersionWithV) -> String {
             format!("{}_{}", executable_name, version)
         }
     } else {
-        panic!("Unsupported target architecture and operating system: {} {}", target_arch, target_os);
+        panic!(
+            "Unsupported target architecture and operating system: {} {}",
+            target_arch, target_os
+        );
     }
 }
 
