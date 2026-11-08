@@ -60,10 +60,16 @@ async fn custom_scope(conn: &Connection, allows: &[String]) -> CliResult<Value> 
     Ok(json!({"type": "custom", "permissions": permissions}))
 }
 
-/// "Full access", or "Custom: 2 instances, 3 permissions".
+/// "Full access", "Launcher: view, start and stop instances", or "Custom: 2 instances,
+/// 3 permissions". A scope type this CLI doesn't know is named as such, never shown as
+/// full access.
 pub fn scope_summary(scope: &Value) -> String {
-    if scope["type"] != "custom" {
-        return "Full access".to_string();
+    match scope["type"].as_str() {
+        Some("full") => return "Full access".to_string(),
+        Some("launcher") => return launcher_summary(scope),
+        Some("custom") => {}
+        Some(other) => return format!("Other ({other})"),
+        None => return "Unknown".to_string(),
     }
     let permissions = &scope["permissions"];
     let mut instances: Vec<&str> = Vec::new();
@@ -92,6 +98,18 @@ pub fn scope_summary(scope: &Value) -> String {
         plural(instances.len(), "instance"),
         plural(granted, "permission")
     )
+}
+
+/// A Lodestone Launcher key: view, start and stop, plus any console access it was
+/// given (`console_read` / `console_write`, when the core offers them).
+fn launcher_summary(scope: &Value) -> String {
+    let mut can = vec!["view", "start and stop instances"];
+    if scope["console_write"] == true {
+        can.push("read and write the console");
+    } else if scope["console_read"] == true {
+        can.push("read the console");
+    }
+    format!("Launcher: {}", can.join(", "))
 }
 
 fn time_or(value: &Value, none: &str) -> String {
@@ -256,6 +274,26 @@ mod tests {
     #[test]
     fn scope_summaries() {
         assert_eq!(scope_summary(&json!({"type": "full"})), "Full access");
+        // A launcher key is not full access, and an unknown scope is never shown as one.
+        assert_eq!(
+            scope_summary(&json!({"type": "launcher"})),
+            "Launcher: view, start and stop instances"
+        );
+        assert_eq!(
+            scope_summary(&json!({"type": "launcher", "console_read": true})),
+            "Launcher: view, start and stop instances, read the console"
+        );
+        assert_eq!(
+            scope_summary(
+                &json!({"type": "launcher", "console_read": true, "console_write": true})
+            ),
+            "Launcher: view, start and stop instances, read and write the console"
+        );
+        assert_eq!(
+            scope_summary(&json!({"type": "future_kind"})),
+            "Other (future_kind)"
+        );
+        assert_eq!(scope_summary(&json!({})), "Unknown");
         let mut p = no_permissions();
         p["can_view_instance"] = json!(["A", "B"]);
         p["can_start_instance"] = json!(["A"]);
