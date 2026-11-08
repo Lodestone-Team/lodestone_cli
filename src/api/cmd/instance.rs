@@ -18,7 +18,7 @@ use crate::api::resolve::{self, InstanceRef};
 use crate::api::{prompt, Ctx};
 
 use super::mods::{self, ModrinthTarget};
-use super::values::{configurable_value, describe_type, display_value};
+use super::values::{configurable_value, describe_type, display_value, parse_bool};
 
 /// "Minecraft Fabric", "Minecraft Bedrock", or a generic instance's game name.
 pub fn game_name(game: &Value) -> String {
@@ -192,14 +192,21 @@ pub async fn run(ctx: &Ctx, cmd: InstanceCmd) -> CliResult<()> {
             value,
         }) => {
             let inst = resolve::instance(&conn, &instance).await?;
-            if matches!(
-                key.as_str(),
-                "auto_start" | "auto-start" | "restart_on_crash" | "restart-on-crash"
-            ) {
-                return Err(CliError::new(
-                    kind::UNSUPPORTED,
-                    "The core has no API to change auto start or restart on crash after creation; set them with `instance create --auto-start --restart-on-crash`",
-                ));
+            let switch = match key.as_str() {
+                "auto_start" | "auto-start" => Some("auto_start"),
+                "restart_on_crash" | "restart-on-crash" => Some("restart_on_crash"),
+                _ => None,
+            };
+            if let Some(route) = switch {
+                let enabled = parse_bool(&value)?;
+                conn.put(&["instance", &inst.uuid, route], Body::Json(json!(enabled)))
+                    .await
+                    .map_err(|e| older_core_error(e, route))?;
+                ctx.out.done(
+                    format!("Set {route} of {inst} to {enabled}"),
+                    json!({"uuid": inst.uuid, "setting": route, "value": enabled}),
+                );
+                return Ok(());
             }
             let manifest = conn.get(&["instance", &inst.uuid, "settings"]).await?;
             let (section_id, setting_id, setting) = find_setting(&manifest, &key)?;
@@ -215,6 +222,18 @@ pub async fn run(ctx: &Ctx, cmd: InstanceCmd) -> CliResult<()> {
             );
             Ok(())
         }
+    }
+}
+
+/// A route the core does not have answers a bare 404: older cores lack the newer routes.
+fn older_core_error(e: CliError, route: &str) -> CliError {
+    if e.kind == kind::NOT_FOUND && e.message.starts_with("The core answered HTTP") {
+        CliError::new(
+            kind::UNSUPPORTED,
+            format!("This core is too old to change {route} after creation; update Lodestone Core"),
+        )
+    } else {
+        e
     }
 }
 
@@ -818,14 +837,25 @@ async fn create_atom(ctx: &Ctx, conn: &Connection, args: CreateAtomArgs) -> CliR
         "url": args.url,
         "setup_value": setup_value(&args.opts, &name, sections),
     });
-    conn.post(&["instance", "create_generic"], Body::Json(body))
+    let uuid = conn
+        .post(&["instance", "create_generic"], Body::Json(body))
         .await?;
-    // the core does not return the atom's UUID; follow the creation in `tasks`
-    ctx.out.done(
-        format!("Creating atom instance {name}. Follow it with `lodestone_cli tasks`"),
-        json!({"name": name, "state": "creating"}),
-    );
-    Ok(())
+    match uuid.as_str() {
+        Some(uuid) => report_creation(ctx, conn, uuid, &name, &args.opts).await,
+        None => {
+            // older cores return nothing, so there is nothing to wait for
+            if args.opts.wait {
+                ctx.out.warn(
+                    "This core does not return the new instance's UUID, so --wait cannot follow it",
+                );
+            }
+            ctx.out.done(
+                format!("Creating atom instance {name}. Follow it with `lodestone_cli tasks`"),
+                json!({"uuid": null, "name": name, "state": "creating"}),
+            );
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]

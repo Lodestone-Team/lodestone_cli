@@ -340,8 +340,8 @@ pub struct CreateAtomArgs {
 pub enum InstanceSettingsCmd {
     /// Show every setting with its value and type.
     Get { instance: String },
-    /// Change a setting. KEY is a setting id (such as `max_ram` or `max-players`) or
-    /// `section.setting`.
+    /// Change a setting. KEY is a setting id (such as `max_ram` or `max-players`),
+    /// `section.setting`, or `auto_start` / `restart_on_crash` with true or false.
     Set {
         instance: String,
         key: String,

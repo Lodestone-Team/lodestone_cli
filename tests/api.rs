@@ -954,3 +954,147 @@ fn plain_http_to_another_machine_warns() {
     assert!(run.stderr.contains("> GET /api/v1/info"), "{}", run.stderr);
     assert!(!run.stderr.contains("test-token"), "{}", run.stderr);
 }
+
+#[test]
+fn auto_start_and_restart_on_crash_use_their_routes() {
+    let server = MockServer::start(|req| match (req.method.as_str(), req.path.as_str()) {
+        ("GET", "/api/v1/instance/list") => Reply::ok(instance_list()),
+        ("PUT", p) if p == format!("/api/v1/instance/{SURVIVAL}/auto_start") => {
+            Reply::ok(Value::Null)
+        }
+        ("PUT", p) if p == format!("/api/v1/instance/{SURVIVAL}/restart_on_crash") => {
+            Reply::ok(Value::Null)
+        }
+        // an older core has no such route: axum answers a bare 404
+        _ => Reply::Text(404, String::new()),
+    });
+    let cli = Cli::with_env(&server);
+    let run = cli.run(&[
+        "instance",
+        "settings",
+        "set",
+        "survival",
+        "auto_start",
+        "true",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        run.json(),
+        json!({"ok": true, "uuid": SURVIVAL, "setting": "auto_start", "value": true})
+    );
+    let run = cli.run(&[
+        "instance",
+        "settings",
+        "set",
+        "survival",
+        "restart-on-crash",
+        "off",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        server.requests_to("PUT", &format!("/api/v1/instance/{SURVIVAL}/auto_start"))[0].json(),
+        json!(true)
+    );
+    assert_eq!(
+        server.requests_to(
+            "PUT",
+            &format!("/api/v1/instance/{SURVIVAL}/restart_on_crash")
+        )[0]
+        .json(),
+        json!(false)
+    );
+    let run = cli.run(&[
+        "instance",
+        "settings",
+        "set",
+        "survival",
+        "auto_start",
+        "maybe",
+        "--json",
+    ]);
+    assert_eq!(run.code, 2);
+
+    let old = MockServer::start(|req| match req.path.as_str() {
+        "/api/v1/instance/list" => Reply::ok(instance_list()),
+        _ => Reply::Text(404, String::new()),
+    });
+    let run = Cli::with_env(&old).run(&[
+        "instance",
+        "settings",
+        "set",
+        "survival",
+        "auto_start",
+        "true",
+        "--json",
+    ]);
+    assert_eq!(run.code, 1);
+    assert_eq!(run.error_json()["error"]["kind"], "UnsupportedOperation");
+}
+
+#[test]
+fn create_atom_returns_and_waits_for_the_uuid() {
+    let server = MockServer::start(|req| match (req.method.as_str(), req.path.as_str()) {
+        ("POST", "/api/v1/instance/create_generic") => {
+            assert_eq!(req.json()["url"], "https://example.com/atom");
+            Reply::ok(json!("INSTANCE_atom"))
+        }
+        ("GET", "/api/v1/events/all/buffer") => Reply::ok(json!([])),
+        ("GET", "/api/v1/events/all/stream") => Reply::WebSocket(vec![
+            progression(
+                "9",
+                json!({"type": "ProgressionStart", "progression_name": "Setting up instance a", "total": 100.0,
+                                    "inner": {"type": "InstanceCreation", "instance_uuid": "INSTANCE_atom"}}),
+            ),
+            progression(
+                "9",
+                json!({"type": "ProgressionEnd", "success": true, "message": "Instance created successfully", "inner": null}),
+            ),
+        ]),
+        _ => Reply::error(404, "NotFound", "Instance not found"),
+    });
+    let cli = Cli::with_env(&server);
+    let run = cli.run(&[
+        "instance",
+        "create-atom",
+        "--url",
+        "https://example.com/atom",
+        "--name",
+        "a",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        run.json(),
+        json!({"ok": true, "uuid": "INSTANCE_atom", "name": "a", "state": "creating"})
+    );
+    let run = cli.run(&[
+        "instance",
+        "create-atom",
+        "--url",
+        "https://example.com/atom",
+        "--name",
+        "a",
+        "--wait",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json()["state"], "created");
+    assert_eq!(run.json()["task"]["id"], "9");
+
+    let old = MockServer::start(|_| Reply::ok(Value::Null));
+    let run = Cli::with_env(&old).run(&[
+        "instance",
+        "create-atom",
+        "--url",
+        "https://example.com/atom",
+        "--name",
+        "a",
+        "--wait",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json()["uuid"], Value::Null);
+    assert!(run.stderr.contains("does not return"), "{}", run.stderr);
+}
