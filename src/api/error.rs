@@ -136,12 +136,10 @@ mod tests {
 
     #[test]
     fn core_errors_keep_their_kind() {
-        let e = CliError::from_response(
-            404,
-            r#"{"kind":"NotFound","causes":["Instance not found"]}"#,
-        );
+        let e =
+            CliError::from_response(404, r#"{"kind":"NotFound","causes":["Server not found"]}"#);
         assert_eq!(e.kind, "NotFound");
-        assert_eq!(e.message, "Instance not found");
+        assert_eq!(e.message, "Server not found");
         assert_eq!(e.exit, ExitCode::Failure);
 
         let e = CliError::from_response(
@@ -176,10 +174,10 @@ mod tests {
 
     #[test]
     fn json_shape() {
-        let e = CliError::new(kind::NOT_FOUND, "No instance named x");
+        let e = CliError::new(kind::NOT_FOUND, "No server named x");
         assert_eq!(
             e.to_json(),
-            serde_json::json!({"error": {"kind": "NotFound", "message": "No instance named x"}})
+            serde_json::json!({"error": {"kind": "NotFound", "message": "No server named x"}})
         );
     }
 

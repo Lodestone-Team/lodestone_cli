@@ -22,10 +22,10 @@ once, then use the subcommands:
 
 ```sh
 lodestone_cli login 192.168.1.20          # https and port 16662 by default
-lodestone_cli instance list
-lodestone_cli instance create --flavour fabric --version 1.21.1 --name survival --wait
+lodestone_cli server list
+lodestone_cli server create --flavour fabric --version 1.21.1 --name survival --wait
 lodestone_cli mods survival install fabric-api
-lodestone_cli instance start survival --wait
+lodestone_cli server start survival --wait
 lodestone_cli console survival --follow
 ```
 
@@ -33,9 +33,9 @@ lodestone_cli console survival --follow
 |---|---|
 | `login`, `logout`, `profile` | Log in and manage saved logins (profiles) |
 | `core` | Core info, global settings, system usage, first-time setup |
-| `instance` | List, create (also from a modpack), start, stop, rename, settings, delete |
+| `server` (alias `instance`) | List, create (also from a modpack), start, stop, rename, settings, delete |
 | `console`, `players`, `monitor` | Console output and commands, players, CPU and memory |
-| `files` | An instance's files, or the core machine's with `--global` |
+| `files` | A server's files, or the core machine's with `--global` |
 | `mods`, `modrinth` | Mods and plugins from Modrinth or uploaded jars; Modrinth search |
 | `macros` | Run and configure macros (owner only) |
 | `users` | Users, passwords and permissions |

@@ -48,7 +48,7 @@ pub fn permission_field(input: &str) -> CliResult<&'static str> {
         .copied()
         .ok_or_else(|| {
             CliError::usage(format!(
-                "`{input}` is not a permission. Per instance: {}. For the core: {}",
+                "`{input}` is not a permission. Per server: {}. For the core: {}",
                 INSTANCE_PERMISSIONS.join(", "),
                 GLOBAL_PERMISSIONS.join(", ")
             ))
@@ -95,7 +95,7 @@ pub fn apply_permission(
         PermissionChange::Flag(flag) => {
             if is_instance_permission(field) {
                 return Err(CliError::usage(format!(
-                    "{field} is per instance: give instance names, or use `users perms grant`"
+                    "{field} is per server: give server names, or use `users perms grant`"
                 )));
             }
             permissions[field] = json!(flag);

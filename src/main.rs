@@ -48,7 +48,7 @@ macro_rules! error {
 pub(crate) use {error, info};
 
 /// A simple CLI tool to install, update and run the Lodestone Core, and to manage a
-/// running core: instances, mods, files, users and more.
+/// running core: servers, mods, files, users and more.
 ///
 /// Without a subcommand, it installs or updates Lodestone Core (and runs it with
 /// --run-core). With a subcommand, it talks to a running core; see `login` first.

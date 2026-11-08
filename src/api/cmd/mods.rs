@@ -425,7 +425,7 @@ pub fn find_installed<'a>(mods: &'a [Value], query: &str) -> CliResult<&'a Value
         }
     }
     Err(CliError::not_found(format!(
-        "No installed mod or plugin `{query}` (see `mods <instance> list`)"
+        "No installed mod or plugin `{query}` (see `mods <server> list`)"
     )))
 }
 
@@ -519,7 +519,7 @@ async fn version_to_install(
                 .collect();
             if compatible.is_empty() {
                 return Err(CliError::not_found(format!(
-                    "No version of `{target}` is for {loader} {game_version}. See `mods <instance> versions {target} --all`, then pass --version and --force"
+                    "No version of `{target}` is for {loader} {game_version}. See `mods <server> versions {target} --all`, then pass --version and --force"
                 )));
             }
             pick_version(&compatible, None)

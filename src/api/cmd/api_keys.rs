@@ -39,7 +39,7 @@ pub fn parse_allow(input: &str) -> CliResult<(&'static str, String)> {
     let value = value.trim().to_string();
     if is_instance_permission(field) && value.is_empty() {
         return Err(CliError::usage(format!(
-            "`--allow {input}`: name the instances, such as {permission}=survival,creative"
+            "`--allow {input}`: name the servers, such as {permission}=survival,creative"
         )));
     }
     Ok((field, value))
@@ -60,7 +60,7 @@ async fn custom_scope(conn: &Connection, allows: &[String]) -> CliResult<Value> 
     Ok(json!({"type": "custom", "permissions": permissions}))
 }
 
-/// "Full access", "Launcher: view, start and stop instances", or "Custom: 2 instances,
+/// "Full access", "Launcher: view, start and stop servers", or "Custom: 2 servers,
 /// 3 permissions". A scope type this CLI doesn't know is named as such, never shown as
 /// full access.
 pub fn scope_summary(scope: &Value) -> String {
@@ -95,7 +95,7 @@ pub fn scope_summary(scope: &Value) -> String {
     let plural = |n: usize, word: &str| format!("{n} {word}{}", if n == 1 { "" } else { "s" });
     format!(
         "Custom: {}, {}",
-        plural(instances.len(), "instance"),
+        plural(instances.len(), "server"),
         plural(granted, "permission")
     )
 }
@@ -103,7 +103,7 @@ pub fn scope_summary(scope: &Value) -> String {
 /// A Lodestone Launcher key: view, start and stop, plus any console access it was
 /// given (`console_read` / `console_write`, when the core offers them).
 fn launcher_summary(scope: &Value) -> String {
-    let mut can = vec!["view", "start and stop instances"];
+    let mut can = vec!["view", "start and stop servers"];
     if scope["console_write"] == true {
         can.push("read and write the console");
     } else if scope["console_read"] == true {
@@ -277,17 +277,17 @@ mod tests {
         // A launcher key is not full access, and an unknown scope is never shown as one.
         assert_eq!(
             scope_summary(&json!({"type": "launcher"})),
-            "Launcher: view, start and stop instances"
+            "Launcher: view, start and stop servers"
         );
         assert_eq!(
             scope_summary(&json!({"type": "launcher", "console_read": true})),
-            "Launcher: view, start and stop instances, read the console"
+            "Launcher: view, start and stop servers, read the console"
         );
         assert_eq!(
             scope_summary(
                 &json!({"type": "launcher", "console_read": true, "console_write": true})
             ),
-            "Launcher: view, start and stop instances, read and write the console"
+            "Launcher: view, start and stop servers, read and write the console"
         );
         assert_eq!(
             scope_summary(&json!({"type": "future_kind"})),
@@ -300,11 +300,11 @@ mod tests {
         p["can_create_instance"] = json!(true);
         assert_eq!(
             scope_summary(&json!({"type": "custom", "permissions": p})),
-            "Custom: 2 instances, 3 permissions"
+            "Custom: 2 servers, 3 permissions"
         );
         assert_eq!(
             scope_summary(&json!({"type": "custom", "permissions": no_permissions()})),
-            "Custom: 0 instances, 0 permissions"
+            "Custom: 0 servers, 0 permissions"
         );
     }
 }

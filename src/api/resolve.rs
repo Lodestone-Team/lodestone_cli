@@ -63,12 +63,12 @@ pub fn match_instance(list: &[Value], query: &str) -> CliResult<InstanceRef> {
         [] => {
             let names: Vec<&str> = list.iter().map(|v| str_field(v, "name")).collect();
             let known = if names.is_empty() {
-                "You cannot see any instances.".to_string()
+                "You cannot see any servers.".to_string()
             } else {
-                format!("Instances: {}", names.join(", "))
+                format!("Servers: {}", names.join(", "))
             };
             Err(CliError::not_found(format!(
-                "No instance named `{query_trimmed}`. {known}"
+                "No server named `{query_trimmed}`. {known}"
             )))
         }
         many => {
@@ -79,7 +79,7 @@ pub fn match_instance(list: &[Value], query: &str) -> CliResult<InstanceRef> {
             Err(CliError::new(
                 kind::AMBIGUOUS,
                 format!(
-                    "`{query_trimmed}` matches several instances; use a UUID: {}",
+                    "`{query_trimmed}` matches several servers; use a UUID: {}",
                     matches.join(", ")
                 ),
             ))
@@ -98,7 +98,7 @@ pub async fn instance(conn: &Connection, query: &str) -> CliResult<InstanceRef> 
     let list = conn.get(&["instance", "list"]).await?;
     let list = list
         .as_array()
-        .ok_or_else(|| CliError::bad_response("The instance list is not a list"))?;
+        .ok_or_else(|| CliError::bad_response("The server list is not a list"))?;
     match_instance(list, query)
 }
 

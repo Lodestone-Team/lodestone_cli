@@ -407,10 +407,10 @@ impl TaskWaiter<'_> {
                 {
                     let task = Task {
                         id: id.clone(),
-                        name: "Instance creation".to_string(),
+                        name: "Server creation".to_string(),
                         instance_uuid: Some(id.clone()),
                         ended: Some(true),
-                        end_message: Some("The instance exists".to_string()),
+                        end_message: Some("The server exists".to_string()),
                         ..Task::default()
                     };
                     return finish(action_result, task);
@@ -555,7 +555,7 @@ mod tests {
         assert_eq!(task.ended, None);
         tasks.apply(&progression(
             "11",
-            json!({"type": "ProgressionEnd", "success": true, "message": "Instance created successfully",
+            json!({"type": "ProgressionEnd", "success": true, "message": "Server created successfully",
                    "inner": {"type": "InstanceCreation", "uuid": "INSTANCE_1", "name": "x"}}),
         ));
         let task = tasks.find("11").unwrap();

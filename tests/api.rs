@@ -129,10 +129,10 @@ fn errors_map_to_exit_codes() {
         p if p.ends_with("/start") => Reply::error(
             403,
             "PermissionDenied",
-            "You don't have permission to start this instance",
+            "You don't have permission to start this server",
         ),
         p if p.ends_with("/stop") => Reply::error(401, "Unauthorized", "Unauthorized"),
-        p if p.ends_with("/info") => Reply::error(404, "NotFound", "Instance not found"),
+        p if p.ends_with("/info") => Reply::error(404, "NotFound", "Server not found"),
         _ => Reply::Text(500, "boom".into()),
     });
     let cli = Cli::with_env(&server);
@@ -141,7 +141,7 @@ fn errors_map_to_exit_codes() {
     assert_eq!(run.code, 1);
     assert_eq!(
         run.error_json(),
-        json!({"error": {"kind": "PermissionDenied", "message": "You don't have permission to start this instance"}})
+        json!({"error": {"kind": "PermissionDenied", "message": "You don't have permission to start this server"}})
     );
     assert!(run.stdout.is_empty());
 
@@ -156,7 +156,7 @@ fn errors_map_to_exit_codes() {
     // without --json, errors are text on stderr
     let run = cli.run(&["instance", "info", "INSTANCE_gone"]);
     assert_eq!(run.code, 1);
-    assert_eq!(run.stderr.trim(), "error: Instance not found");
+    assert_eq!(run.stderr.trim(), "error: Server not found");
 
     // usage errors exit 2, as JSON with --json
     let run = cli.run(&["instance", "frobnicate", "--json"]);
@@ -614,12 +614,12 @@ fn tasks_wait_for_instance_creation() {
                 ),
                 progression(
                     "77",
-                    json!({"type": "ProgressionEnd", "success": true, "message": "Instance created successfully",
+                    json!({"type": "ProgressionEnd", "success": true, "message": "Server created successfully",
                                          "inner": {"type": "InstanceCreation", "uuid": "INSTANCE_new", "name": "new"}}),
                 ),
             ])
         }
-        p if p.ends_with("/info") => Reply::error(404, "NotFound", "Instance not found"),
+        p if p.ends_with("/info") => Reply::error(404, "NotFound", "Server not found"),
         _ => Reply::error(404, "NotFound", "Not found"),
     });
     let cli = Cli::with_env(&server);
@@ -647,10 +647,10 @@ fn tasks_wait_for_instance_creation() {
             ),
             progression(
                 "78",
-                json!({"type": "ProgressionEnd", "success": false, "message": "Instance creation failed: no Java", "inner": null}),
+                json!({"type": "ProgressionEnd", "success": false, "message": "Server creation failed: no Java", "inner": null}),
             ),
         ]),
-        _ => Reply::error(404, "NotFound", "Instance not found"),
+        _ => Reply::error(404, "NotFound", "Server not found"),
     });
     let cli = Cli::with_env(&failing);
     let run = cli.run(&[
@@ -1097,15 +1097,15 @@ fn create_atom_returns_and_waits_for_the_uuid() {
         ("GET", "/api/v1/events/all/stream") => Reply::WebSocket(vec![
             progression(
                 "9",
-                json!({"type": "ProgressionStart", "progression_name": "Setting up instance a", "total": 100.0,
+                json!({"type": "ProgressionStart", "progression_name": "Setting up server a", "total": 100.0,
                                     "inner": {"type": "InstanceCreation", "instance_uuid": "INSTANCE_atom"}}),
             ),
             progression(
                 "9",
-                json!({"type": "ProgressionEnd", "success": true, "message": "Instance created successfully", "inner": null}),
+                json!({"type": "ProgressionEnd", "success": true, "message": "Server created successfully", "inner": null}),
             ),
         ]),
-        _ => Reply::error(404, "NotFound", "Instance not found"),
+        _ => Reply::error(404, "NotFound", "Server not found"),
     });
     let cli = Cli::with_env(&server);
     let run = cli.run(&[
@@ -1378,8 +1378,7 @@ fn api_keys_list_create_and_revoke_with_a_session() {
     assert_eq!(run.json()[1]["name"], "agent");
     let run = cli.run(&["api-keys", "list"]);
     assert!(
-        run.stdout.contains("Full access")
-            && run.stdout.contains("Custom: 1 instance, 1 permission"),
+        run.stdout.contains("Full access") && run.stdout.contains("Custom: 1 server, 1 permission"),
         "{}",
         run.stdout
     );

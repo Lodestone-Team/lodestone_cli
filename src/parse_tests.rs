@@ -2,7 +2,7 @@
 
 use clap::{CommandFactory, Parser};
 
-use crate::api::cli::{Command, ConsoleCmd, FilesCmd, InstanceCmd, ModsCmd};
+use crate::api::cli::{Command, ConsoleCmd, EventTypeArg, FilesCmd, InstanceCmd, ModsCmd};
 use crate::Args;
 
 const SKILL: &str = include_str!("../skills/lodestone/SKILL.md");
@@ -207,7 +207,33 @@ fn global_options_go_anywhere() {
 }
 
 #[test]
-fn files_take_an_instance_or_global() {
+fn server_and_instance_both_work() {
+    for word in ["server", "instance"] {
+        let args = parse(&[word, "start", "survival", "--wait"]).unwrap();
+        let Some(Command::Instance(InstanceCmd::Start(power))) = args.command else {
+            panic!("{word}")
+        };
+        assert_eq!(power.instance, "survival");
+        assert!(power.wait);
+    }
+    for flag in ["--server", "--instance"] {
+        let args = parse(&["events", flag, "a,b"]).unwrap();
+        let Some(Command::Events(events)) = args.command else {
+            panic!("{flag}")
+        };
+        assert_eq!(events.instance, ["a", "b"]);
+    }
+    for value in ["server", "instance"] {
+        let args = parse(&["events", "--type", value]).unwrap();
+        let Some(Command::Events(events)) = args.command else {
+            panic!("{value}")
+        };
+        assert_eq!(events.event_type, [EventTypeArg::Instance]);
+    }
+}
+
+#[test]
+fn files_take_a_server_or_global() {
     let args = parse(&["files", "survival", "ls", "world"]).unwrap();
     let Some(Command::Files(files)) = args.command else {
         panic!()

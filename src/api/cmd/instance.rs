@@ -71,7 +71,7 @@ pub async fn run(ctx: &Ctx, cmd: InstanceCmd) -> CliResult<()> {
                         cell(&info["uuid"]),
                     ]);
                 }
-                table.print_or("No instances.");
+                table.print_or("No servers.");
             });
             Ok(())
         }
@@ -285,7 +285,7 @@ fn print_settings(manifest: &Value) {
             }
             table.row([id.clone(), value, ty, cell(&setting["name"])]);
         }
-        table.print_or("  (none yet: start the instance once to fill server.properties)");
+        table.print_or("  (none yet: start the server once to fill server.properties)");
     }
 }
 
@@ -318,7 +318,7 @@ pub fn find_setting(manifest: &Value, key: &str) -> CliResult<(String, String, V
     match matches.len() {
         1 => Ok(matches.into_iter().next().expect("one match")),
         0 => Err(CliError::not_found(format!(
-            "No setting `{key}` (see `instance settings get`; server.properties settings appear once the server ran)"
+            "No setting `{key}` (see `server settings get`; server.properties settings appear once the server ran)"
         ))),
         _ => Err(CliError::new(
             kind::AMBIGUOUS,
@@ -576,7 +576,7 @@ async fn create(ctx: &Ctx, conn: &Connection, args: CreateArgs) -> CliResult<()>
         version
     } else {
         return Err(CliError::usage(format!(
-            "Version `{version}` is not available for {flavour:?}; see `lodestone_cli instance versions {}`",
+            "Version `{version}` is not available for {flavour:?}; see `lodestone_cli server versions {}`",
             format!("{flavour:?}").to_lowercase()
         )));
     };
@@ -669,7 +669,7 @@ async fn create(ctx: &Ctx, conn: &Connection, args: CreateArgs) -> CliResult<()>
         .await?;
     let uuid = uuid
         .as_str()
-        .ok_or_else(|| CliError::bad_response("The core did not return the new instance's UUID"))?
+        .ok_or_else(|| CliError::bad_response("The core did not return the new server's UUID"))?
         .to_string();
     report_creation(ctx, conn, &uuid, &name, &args.opts).await
 }
@@ -789,7 +789,7 @@ async fn create_modpack(ctx: &Ctx, conn: &Connection, args: CreateModpackArgs) -
         .await?;
     let uuid = uuid
         .as_str()
-        .ok_or_else(|| CliError::bad_response("The core did not return the new instance's UUID"))?
+        .ok_or_else(|| CliError::bad_response("The core did not return the new server's UUID"))?
         .to_string();
     report_creation(ctx, conn, &uuid, &name, &args.opts).await
 }
@@ -846,11 +846,11 @@ async fn create_atom(ctx: &Ctx, conn: &Connection, args: CreateAtomArgs) -> CliR
             // older cores return nothing, so there is nothing to wait for
             if args.opts.wait {
                 ctx.out.warn(
-                    "This core does not return the new instance's UUID, so --wait cannot follow it",
+                    "This core does not return the new server's UUID, so --wait cannot follow it",
                 );
             }
             ctx.out.done(
-                format!("Creating atom instance {name}. Follow it with `lodestone_cli tasks`"),
+                format!("Creating atom server {name}. Follow it with `lodestone_cli tasks`"),
                 json!({"uuid": null, "name": name, "state": "creating"}),
             );
             Ok(())

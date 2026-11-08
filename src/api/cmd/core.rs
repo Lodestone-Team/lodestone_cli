@@ -167,7 +167,7 @@ pub async fn run(ctx: &Ctx, cmd: CoreCmd) -> CliResult<()> {
                 match (in_use, allocated) {
                     (false, false) => println!("Port {port} is free"),
                     (true, _) => println!("Port {port} is in use"),
-                    (false, true) => println!("Port {port} is assigned to an instance"),
+                    (false, true) => println!("Port {port} is assigned to a server"),
                 }
             });
             Ok(())
@@ -178,7 +178,7 @@ pub async fn run(ctx: &Ctx, cmd: CoreCmd) -> CliResult<()> {
             let doc = json!({"name": name, "in_use": used});
             ctx.out.show(&doc, || {
                 if used.as_bool().unwrap_or(false) {
-                    println!("The name `{name}` is used by an instance");
+                    println!("The name `{name}` is used by a server");
                 } else {
                     println!("The name `{name}` is free");
                 }
