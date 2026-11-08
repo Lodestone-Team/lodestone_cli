@@ -59,7 +59,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -91,7 +91,7 @@ jobs:
           mv ./target/${{ matrix.target }}/release/lodestone_cli${{ matrix.postfix }} ./${FILENAME}
 
       - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3.1.2
+        uses: actions/upload-artifact@v4
         with:
           path: ./${{env.FILENAME}}
           name: ${{env.FILENAME}}
