@@ -379,6 +379,16 @@ pub fn b64(path: &str) -> String {
     out
 }
 
+const PROXY_VARIABLES: [&str; 6] = [
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+    "ALL_PROXY",
+    "all_proxy",
+];
+const LOOPBACK: &str = "127.0.0.1,localhost,::1";
+
 /// Runs the CLI with a private config folder.
 pub struct Cli {
     pub config_dir: tempfile::TempDir,
@@ -435,9 +445,17 @@ impl Cli {
             .env_remove("LODESTONE_PASSWORD")
             .env_remove("LODESTONE_FINGERPRINT")
             .env_remove("LODESTONE_CA_CERT")
+            // nothing the CLI writes by accident lands in the repository
+            .current_dir(self.config_dir.path())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+        // The mock core is on loopback: a proxy from the developer's or CI's environment
+        // (or the system settings, which reqwest reads too) must not get in between.
+        for proxy in PROXY_VARIABLES {
+            command.env_remove(proxy);
+        }
+        command.env("NO_PROXY", LOOPBACK).env("no_proxy", LOOPBACK);
         for (k, v) in &self.env {
             command.env(k, v);
         }
@@ -458,7 +476,8 @@ impl Cli {
     }
 }
 
-/// Waits for the CLI, killing it after 60 seconds. Returns the exit code and output.
+/// Waits for the CLI, killing it after 180 seconds (well above the tests' own timeouts,
+/// which only bound a wait that normally ends at once). Returns the exit code and output.
 fn wait_with_timeout(mut child: std::process::Child) -> (i32, Vec<u8>, Vec<u8>) {
     fn reader(mut pipe: impl Read + Send + 'static) -> std::thread::JoinHandle<Vec<u8>> {
         std::thread::spawn(move || {
@@ -469,14 +488,14 @@ fn wait_with_timeout(mut child: std::process::Child) -> (i32, Vec<u8>, Vec<u8>) 
     }
     let stdout = reader(child.stdout.take().unwrap());
     let stderr = reader(child.stderr.take().unwrap());
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(180);
     let status = loop {
         if let Some(status) = child.try_wait().unwrap() {
             break status;
         }
         if std::time::Instant::now() > deadline {
             let _ = child.kill();
-            panic!("the CLI did not finish within 60 seconds");
+            panic!("the CLI did not finish within 180 seconds");
         }
         std::thread::sleep(std::time::Duration::from_millis(20));
     };

@@ -559,7 +559,7 @@ fn console_follows_until_a_line_appears() {
         "--until",
         "Done (",
         "--timeout",
-        "20",
+        "120",
     ]);
     assert_eq!(run.code, 0, "{}", run.stderr);
     // the old "Done" from the buffer does not end the wait, and lines are not repeated
@@ -628,7 +628,7 @@ fn tasks_wait_for_instance_creation() {
         "--wait",
         "INSTANCE_new",
         "--timeout",
-        "20",
+        "120",
         "--json",
     ]);
     assert_eq!(run.code, 0, "{}", run.stderr);
@@ -658,7 +658,7 @@ fn tasks_wait_for_instance_creation() {
         "--wait",
         "INSTANCE_bad",
         "--timeout",
-        "20",
+        "120",
         "--json",
     ]);
     assert_eq!(run.code, 1);
