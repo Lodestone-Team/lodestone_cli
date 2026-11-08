@@ -2,7 +2,6 @@
 
 use std::time::Duration;
 
-use reqwest::Method;
 use serde_json::{json, Value};
 
 use crate::api::cli::{EventsArgs, ExtensionCmd, PlayitCmd, TasksArgs};
@@ -349,12 +348,7 @@ pub async fn extension(ctx: &Ctx, cmd: ExtensionCmd) -> CliResult<()> {
         }
         ExtensionCmd::Manifest { url } => {
             let manifest = conn
-                .json(
-                    Method::GET,
-                    &["extension", "fetchmanifest"],
-                    &[],
-                    Body::Json(json!({"url": url})),
-                )
+                .get_query(&["extension", "fetchmanifest"], &[("url", url)])
                 .await?;
             ctx.out.show(&manifest, || {
                 let m = &manifest["manifest"];
