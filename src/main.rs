@@ -150,7 +150,7 @@ async fn self_update() -> Result<()> {
         let bin_file = File::create(&bin_path)?;
         self_update::Download::from_url(&latest.download_url)
             .set_header(
-                reqwest::header::ACCEPT,
+                http::header::ACCEPT,
                 "application/octet-stream".parse().unwrap(),
             )
             .show_progress(true)
