@@ -416,3 +416,6 @@ async fn main() {
         info!("No Lodestone Core executable found, cli will now exit...")
     }
 }
+
+#[cfg(test)]
+mod parse_tests;
