@@ -16,7 +16,6 @@ use crate::api::{prompt, warn_plain_http, Ctx, ENV_PASSWORD, ENV_USERNAME};
 /// or, for a certificate nobody vouches for, the user comparing its fingerprint (trust on
 /// first use).
 async fn establish_trust(
-    ctx: &Ctx,
     url: &Url,
     args: &ConnectArgs,
     existing: Option<&Profile>,
@@ -106,7 +105,6 @@ async fn establish_trust(
     );
     // `--yes` never answers this: trusting a certificate needs the user's own check
     prompt::confirm(false, "Is it the same, and do you trust this core?")?;
-    let _ = ctx;
     Ok((Trust::Pinned(fingerprint), pinned_settings(&fingerprint)))
 }
 
@@ -225,7 +223,7 @@ pub async fn login(ctx: &Ctx, args: LoginArgs) -> CliResult<()> {
         .profiles
         .values()
         .find(|p| http::parse_core_url(&p.url).ok().as_ref() == Some(&url));
-    let (trust, settings) = establish_trust(ctx, &url, &args.connect, existing).await?;
+    let (trust, settings) = establish_trust(&url, &args.connect, existing).await?;
     let conn = Connection::new(url.clone(), None, trust, ctx.global.verbose)?;
     let info = conn.get(&["info"]).await?;
     if info["is_setup"].as_bool() == Some(false) {
@@ -245,7 +243,7 @@ pub async fn login(ctx: &Ctx, args: LoginArgs) -> CliResult<()> {
 pub async fn setup(ctx: &Ctx, args: SetupArgs) -> CliResult<()> {
     let url = http::parse_core_url(&args.url)?;
     warn_plain_http(&ctx.out, &url);
-    let (trust, settings) = establish_trust(ctx, &url, &args.connect, None).await?;
+    let (trust, settings) = establish_trust(&url, &args.connect, None).await?;
     let conn = Connection::new(url.clone(), None, trust, ctx.global.verbose)?;
     let info = conn.get(&["info"]).await?;
     if info["is_setup"].as_bool() == Some(true) {

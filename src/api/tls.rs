@@ -433,7 +433,11 @@ pub async fn probe(url: &reqwest::Url, trust: &Trust) -> CliResult<Probe> {
             error: Some(e),
         }),
         // no certificate at all: not a TLS server, or the connection broke
-        Err(e) => Err(e),
+        Err(mut e) => {
+            e.message
+                .push_str(". If this core does not serve HTTPS, connect with http://");
+            Err(e)
+        }
     }
 }
 
