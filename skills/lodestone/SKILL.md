@@ -1,6 +1,6 @@
 ---
 name: lodestone
-description: Manage Lodestone game servers with the `lodestone_cli` command line tool. Use it to create, start, stop and configure Minecraft instances on a Lodestone Core, install and update mods or plugins from Modrinth, create servers from modpacks, read the console, edit, back up and download server files, and manage users and their permissions.
+description: Manage Lodestone game servers with the `lodestone_cli` command line tool. Use it to create, start, stop and configure Minecraft servers on a Lodestone Core, install and update mods or plugins from Modrinth, create servers from modpacks, read the console, edit, back up and download server files, and manage users and their permissions.
 ---
 
 # Lodestone CLI
@@ -17,7 +17,7 @@ installs and runs Lodestone Core itself; this skill only uses the subcommands.
 ### Agents: use an API key that the user gives you
 
 Authenticate with an **API key**, not with the user's password. The user creates a key for
-you, limited to what you need (a *custom* scope: some instances and some actions, and an
+you, limited to what you need (a *custom* scope: some servers and some actions, and an
 expiry), in the dashboard (User settings, API keys) or with `api-keys create`. They put it in
 your environment, together with the core's URL and, for the default self-signed certificate,
 its fingerprint:
@@ -30,7 +30,7 @@ Then every command just works, with no login step:
 
 ```sh
 lodestone_cli --json users me
-lodestone_cli --json instance list
+lodestone_cli --json server list
 ```
 
 - **Never print, store or echo the key.** Do not `echo` it, write it to a file, put it on a
@@ -99,7 +99,7 @@ Errors go to stderr. With `--json` they are one line: `{"error": {"kind": "...",
 | 2 | Wrong command line |
 | 3 | Not logged in, or the login expired: run `login` again |
 
-Instances are named by UUID or by name (any case). An ambiguous name fails with kind
+Servers are named by UUID or by name (any case). An ambiguous name fails with kind
 `Ambiguous` and lists the UUIDs.
 
 ## Command reference
@@ -119,38 +119,38 @@ lodestone_cli --json core check-port 25565
 Settings for `core settings set`: `name`, `safe-mode`, `code-execution`, `domain`,
 `allow-lan-http`, `playit` (owner only).
 
-Instances:
+Servers (`instance` is the old name of `server` and still works):
 
 ```sh
-lodestone_cli --json instance list
-lodestone_cli --json instance info survival
-lodestone_cli --json instance versions fabric
-lodestone_cli --json instance create --flavour fabric --version 1.21.1 --name survival --max-ram 4096 --wait
-lodestone_cli --json instance create-modpack https://modrinth.com/modpack/fabulously-optimized --name fo --wait
-lodestone_cli --json instance create-modpack ./pack.mrpack --name mypack --inspect
-lodestone_cli --json instance start survival --wait
-lodestone_cli --json instance stop survival --wait
-lodestone_cli --json instance restart survival
-lodestone_cli --json instance kill survival --yes
-lodestone_cli --json instance rename survival "Survival 2"
-lodestone_cli --json instance description survival "Our main world"
-lodestone_cli --json instance settings get survival
-lodestone_cli --json instance settings set survival max_ram 6144
-lodestone_cli --json instance settings set survival max-players 30
-lodestone_cli --json instance settings set survival auto_start true
-lodestone_cli --json instance settings set survival restart_on_crash true
-lodestone_cli --json instance delete survival --yes
+lodestone_cli --json server list
+lodestone_cli --json server info survival
+lodestone_cli --json server versions fabric
+lodestone_cli --json server create --flavour fabric --version 1.21.1 --name survival --max-ram 4096 --wait
+lodestone_cli --json server create-modpack https://modrinth.com/modpack/fabulously-optimized --name fo --wait
+lodestone_cli --json server create-modpack ./pack.mrpack --name mypack --inspect
+lodestone_cli --json server start survival --wait
+lodestone_cli --json server stop survival --wait
+lodestone_cli --json server restart survival
+lodestone_cli --json server kill survival --yes
+lodestone_cli --json server rename survival "Survival 2"
+lodestone_cli --json server description survival "Our main world"
+lodestone_cli --json server settings get survival
+lodestone_cli --json server settings set survival max_ram 6144
+lodestone_cli --json server settings set survival max-players 30
+lodestone_cli --json server settings set survival auto_start true
+lodestone_cli --json server settings set survival restart_on_crash true
+lodestone_cli --json server delete survival --yes
 ```
 
 - Flavours: `vanilla`, `fabric`, `forge`, `paper`. `--version latest` is the default.
   Without `--port` the first free port from 25565 is used.
-- `instance settings get` lists every setting id. `server.properties` settings (such as
+- `server settings get` lists every setting id. `server.properties` settings (such as
   `motd`, `difficulty`, `max-players`) appear after the server has run once. Use
   `section.setting` if an id is in two sections.
 - Auto start and restart on crash are set with `--auto-start` and `--restart-on-crash` at
-  creation, or later with `instance settings set <instance> auto_start|restart_on_crash true|false`.
-- `instance create-atom --url <url> --name <name> --wait` (owner only, needs code execution)
-  and `instance docker-watch <container>` exist too. `create-atom` returns the new UUID.
+  creation, or later with `server settings set <server> auto_start|restart_on_crash true|false`.
+- `server create-atom --url <url> --name <name> --wait` (owner only, needs code execution)
+  and `server docker-watch <container>` exist too. `create-atom` returns the new UUID.
 
 Console, players, resource usage:
 
@@ -165,7 +165,7 @@ lodestone_cli --json monitor survival
 
 `--until` only matches lines that arrive after the command starts, never older lines.
 
-Files (paths are relative to the instance folder; `--global` uses absolute paths on the
+Files (paths are relative to the server folder; `--global` uses absolute paths on the
 core's machine and needs global file permissions):
 
 ```sh
@@ -190,7 +190,7 @@ lodestone_cli --json files --global ls /home/minecraft
 `zip` and `unzip` run in the background and return the task id as `task_id`; with `--wait`
 they wait for that task and exit 1 with kind `TaskFailed` if it fails.
 
-Mods and plugins (Fabric, Forge, Paper and Spigot instances; plugin instances use the same
+Mods and plugins (Fabric, Forge, Paper and Spigot servers; plugin servers use the same
 commands):
 
 ```sh
@@ -212,7 +212,7 @@ lodestone_cli --json modrinth versions fabulously-optimized
 ```
 
 - `install` takes a slug, project id, version id or Modrinth link. By default it installs the
-  newest release for the instance's loader and game version, with required dependencies
+  newest release for the server's loader and game version, with required dependencies
   (`--no-deps` to skip them). `--force` installs a version for another loader or game version.
 - Mods are named by file name, slug, Modrinth title or the name in the jar.
 - After changes to a running server the result says a restart is needed.
@@ -242,10 +242,10 @@ lodestone_cli --json users rename bob robert
 lodestone_cli --json users delete robert --yes
 ```
 
-Per-instance permissions: `view_instance`, `start_instance`, `stop_instance`,
-`access_instance_console`, `access_instance_setting`, `read_instance_resource`,
-`write_instance_resource`, `access_instance_macro`, `read_instance_file`,
-`write_instance_file`. For the whole core (true or false): `create_instance`,
+Per-server permissions (their names still say `instance`): `view_instance`,
+`start_instance`, `stop_instance`, `access_instance_console`, `access_instance_setting`,
+`read_instance_resource`, `write_instance_resource`, `access_instance_macro`,
+`read_instance_file`, `write_instance_file`. For the whole core (true or false): `create_instance`,
 `delete_instance`, `read_global_file`, `write_global_file`, `manage_permission`,
 `install_extension`. The `can_` prefix is optional.
 
@@ -260,8 +260,8 @@ lodestone_cli --json api-keys revoke lsk_ab12cd34ef56_… --yes
 lodestone_cli --json api-keys list --user bob
 ```
 
-- `--allow PERMISSION=VALUE` takes the permissions of `users perms set`, repeated: instance
-  names for per-instance permissions, `true` for the others. `--full` gives everything the
+- `--allow PERMISSION=VALUE` takes the permissions of `users perms set`, repeated: server
+  names for per-server permissions, `true` for the others. `--full` gives everything the
   user can do. `--expires` is `30d`, `90d` (default), `1y` or `never`.
 - `create` prints the key once (in `key` with `--json`) and never again.
 - With an API key login, these fail with "needs a signed-in session".
@@ -271,15 +271,15 @@ Events, tasks, playit.gg:
 ```sh
 lodestone_cli --json events --limit 20
 lodestone_cli --json events --level warning,error --since 24h
-lodestone_cli --json events --instance survival --follow
+lodestone_cli --json events --server survival --follow
 lodestone_cli --json tasks
 lodestone_cli --json tasks --wait INSTANCE_8f0c1b2e-0000-4000-8000-000000000000 --timeout 1800
 lodestone_cli --json playit status
 lodestone_cli --json playit tunnels
 ```
 
-`tasks --wait` takes a task id (such as the `task_id` of `files zip`) or the UUID of an
-instance being created; it exits 1 with kind `TaskFailed` if the task fails.
+`tasks --wait` takes a task id (such as the `task_id` of `files zip`) or the UUID of a
+server being created; it exits 1 with kind `TaskFailed` if the task fails.
 
 ## Workflows
 
@@ -287,15 +287,15 @@ Create a Fabric server, add Fabric API and a mod from a Modrinth link, start it 
 user about the EULA first, see the safety rules), and wait until it is up:
 
 ```sh
-lodestone_cli --json instance create --flavour fabric --version 1.21.1 --name survival --wait
+lodestone_cli --json server create --flavour fabric --version 1.21.1 --name survival --wait
 lodestone_cli --json mods survival install fabric-api
 lodestone_cli --json mods survival install https://modrinth.com/mod/lithium
-lodestone_cli --json instance start survival
+lodestone_cli --json server start survival
 lodestone_cli --json console survival --follow --until "Done (" --timeout 600
 ```
 
-`instance create` without `--wait` returns `{"ok": true, "uuid": ...}` at once; then wait with
-`lodestone_cli --json tasks --wait <uuid>`. `instance start survival --wait` also waits until
+`server create` without `--wait` returns `{"ok": true, "uuid": ...}` at once; then wait with
+`lodestone_cli --json tasks --wait <uuid>`. `server start survival --wait` also waits until
 the state is `Running`.
 
 Update every mod, then restart so the changes apply:
@@ -303,7 +303,7 @@ Update every mod, then restart so the changes apply:
 ```sh
 lodestone_cli --json mods survival list --check-updates
 lodestone_cli --json mods survival update --all
-lodestone_cli --json instance restart survival --wait
+lodestone_cli --json server restart survival --wait
 ```
 
 Back up a world (zip it on the core, then download the zip):
@@ -328,18 +328,18 @@ lodestone_cli --json users perms get bob
 ## Safety rules for agents
 
 - **Destructive commands need the user's confirmation** in the conversation before you run
-  them: `instance delete`, `instance kill`, `files rm`, `mods remove`, `users delete`,
+  them: `server delete`, `server kill`, `files rm`, `mods remove`, `users delete`,
   `macros kill`, overwriting with `files write` or `mods upload --overwrite`, and turning off
   `code-execution` (it stops all macros). Only then pass `--yes`. Without `--yes` and without a
   terminal they fail with kind `ConfirmationRequired` instead of hanging.
 - **Starting a Minecraft server accepts Mojang's EULA** (https://aka.ms/MinecraftEULA). Only
-  the user can agree to it. Ask before the first `instance start`, `restart` or a creation
+  the user can agree to it. Ask before the first `server start`, `restart` or a creation
   with `--auto-start`, and never write `eula=true` yourself.
 - **Authenticate with the API key the user gave you** (`LODESTONE_URL` and `LODESTONE_TOKEN`),
   not with their password. **Never print, store or echo keys, tokens or passwords**, never
   pass them as command line arguments, and never create or revoke API keys unless the user
   asks. Never confirm a TLS fingerprint on the user's behalf.
-- **Macros and atom instances are owner only**, and also need code execution to be on. A
+- **Macros and atom servers are owner only**, and also need code execution to be on. A
   `PermissionDenied` error for them is expected for other users; do not try to work around it.
 - Prefer `--wait` and `tasks --wait` over polling, and use `--timeout` so a command cannot run
   forever.

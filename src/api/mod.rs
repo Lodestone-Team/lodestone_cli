@@ -206,7 +206,7 @@ mod tests {
             with_credential_hint(session_only(), Some(AuthKind::Session)),
             session_only()
         );
-        let other = CliError::new("NotFound", "Instance not found");
+        let other = CliError::new("NotFound", "Server not found");
         assert_eq!(
             with_credential_hint(other.clone(), Some(AuthKind::ApiKey)),
             other

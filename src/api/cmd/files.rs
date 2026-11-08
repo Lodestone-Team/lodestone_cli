@@ -49,7 +49,7 @@ impl Scope {
             Scope::Global => Err(CliError::new(
                 kind::UNSUPPORTED,
                 format!(
-                    "`files {what}` works on instances only; the core has no global route for it"
+                    "`files {what}` works on servers only; the core has no global route for it"
                 ),
             )),
         }

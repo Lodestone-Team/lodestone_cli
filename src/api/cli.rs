@@ -40,22 +40,22 @@ pub enum Command {
     /// The core: info, global settings, system usage, first-time setup.
     #[command(subcommand)]
     Core(CoreCmd),
-    /// Instances: list, create, start, stop, settings, delete.
-    #[command(subcommand)]
+    /// Servers: list, create, start, stop, settings, delete.
+    #[command(subcommand, name = "server", visible_alias = "instance")]
     Instance(InstanceCmd),
-    /// Show an instance's console output, follow it, or send a command.
+    /// Show a server's console output, follow it, or send a command.
     Console(ConsoleArgs),
-    /// List the players on an instance.
+    /// List the players on a server.
     Players(PlayersArgs),
-    /// CPU and memory usage of an instance.
+    /// CPU and memory usage of a server.
     Monitor(MonitorArgs),
-    /// Files of an instance, or of the core's machine with --global.
+    /// Files of a server, or of the core's machine with --global.
     Files(FilesArgs),
-    /// Macros of an instance (owner only).
+    /// Macros of a server (owner only).
     Macros(MacrosArgs),
-    /// Mods or plugins of an instance, from Modrinth or uploaded jars.
+    /// Mods or plugins of a server, from Modrinth or uploaded jars.
     Mods(ModsArgs),
-    /// Search Modrinth (through the core) without an instance, for modpacks for example.
+    /// Search Modrinth (through the core) without a server, for modpacks for example.
     #[command(subcommand)]
     Modrinth(ModrinthCmd),
     /// Users and their permissions.
@@ -70,7 +70,7 @@ pub enum Command {
     /// The playit.gg tunnel (owner only).
     #[command(subcommand)]
     Playit(PlayitCmd),
-    /// Background tasks such as instance creation; --wait blocks until one ends.
+    /// Background tasks such as creating a server; --wait blocks until one ends.
     Tasks(TasksArgs),
     /// Extensions (owner only).
     #[command(subcommand)]
@@ -137,11 +137,11 @@ pub enum CoreCmd {
     System,
     /// First-time setup: create the owner account with the setup key from the core's log.
     Setup(SetupArgs),
-    /// The game types instances can be created for.
+    /// The game types servers can be created for.
     Games,
     /// Whether a port is free on the core's machine.
     CheckPort { port: u16 },
-    /// Whether an instance name is already used.
+    /// Whether a server name is already used.
     CheckName { name: String },
     /// Open a port on the router with UPnP (owner only).
     OpenPort { port: u16 },
@@ -215,55 +215,77 @@ impl Flavour {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum InstanceCmd {
-    /// List the instances you can see.
+    /// List the servers you can see.
     List,
-    /// Details of an instance.
-    Info { instance: String },
-    /// The state of an instance: Starting, Running, Stopping, Stopped or Error.
-    State { instance: String },
-    /// The Minecraft versions an instance of a flavour can be created with.
+    /// Details of a server.
+    Info {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+    },
+    /// The state of a server: Starting, Running, Stopping, Stopped or Error.
+    State {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+    },
+    /// The Minecraft versions a server of a flavour can be created with.
     Versions { flavour: Flavour },
-    /// Create a Minecraft instance. Without options on a terminal, asks for each setting.
+    /// Create a Minecraft server. Without options on a terminal, asks for each setting.
     Create(CreateArgs),
-    /// Create a Fabric instance from a Modrinth modpack (link, version id, project) or a
+    /// Create a Fabric server from a Modrinth modpack (link, version id, project) or a
     /// .mrpack file.
     CreateModpack(CreateModpackArgs),
-    /// Create an atom (generic) instance from a URL (owner only, needs code execution).
+    /// Create an atom (generic) server from a URL (owner only, needs code execution).
     CreateAtom(CreateAtomArgs),
     /// Add a Docker container to Lodestone's watch list.
     DockerWatch {
         /// The container's name.
         container: String,
     },
-    /// Start an instance. Starting a Minecraft server accepts Mojang's EULA.
+    /// Start a server. Starting a Minecraft server accepts Mojang's EULA.
     Start(PowerArgs),
-    /// Stop an instance.
+    /// Stop a server.
     Stop(PowerArgs),
-    /// Restart an instance.
+    /// Restart a server.
     Restart(PowerArgs),
-    /// Kill an instance's process without saving.
-    Kill { instance: String },
-    /// Delete an instance and all its files. It must be stopped.
-    Delete { instance: String },
-    /// Rename an instance.
-    Rename { instance: String, name: String },
-    /// Change an instance's description.
+    /// Kill a server's process without saving.
+    Kill {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+    },
+    /// Delete a server and all its files. It must be stopped.
+    Delete {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+    },
+    /// Rename a server.
+    Rename {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+        name: String,
+    },
+    /// Change a server's description.
     Description {
+        #[arg(value_name = "SERVER")]
         instance: String,
         description: String,
     },
-    /// Change the Minecraft version of an instance.
-    Version { instance: String, version: String },
-    /// An instance's settings: command line, RAM and server.properties.
+    /// Change the Minecraft version of a server.
+    Version {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+        version: String,
+    },
+    /// A server's settings: command line, RAM and server.properties.
     #[command(subcommand)]
     Settings(InstanceSettingsCmd),
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct PowerArgs {
-    /// The instance: its name or UUID.
+    /// The server: its name or UUID.
+    #[arg(value_name = "SERVER")]
     pub instance: String,
-    /// Wait until the instance is Running (start, restart) or Stopped (stop).
+    /// Wait until the server is Running (start, restart) or Stopped (stop).
     #[arg(long)]
     pub wait: bool,
     /// With --wait, give up after this many seconds.
@@ -273,7 +295,7 @@ pub struct PowerArgs {
 
 #[derive(Args, Debug, Clone, Default)]
 pub struct NewInstanceOpts {
-    /// The instance's name.
+    /// The server's name.
     #[arg(long)]
     pub name: Option<String>,
     /// The server port. Default: the first free port from 25565.
@@ -287,13 +309,13 @@ pub struct NewInstanceOpts {
     pub max_ram: Option<u32>,
     #[arg(long)]
     pub description: Option<String>,
-    /// Start the instance when the core starts.
+    /// Start the server when the core starts.
     #[arg(long)]
     pub auto_start: bool,
-    /// Restart the instance when it crashes.
+    /// Restart the server when it crashes.
     #[arg(long)]
     pub restart_on_crash: bool,
-    /// Wait until the instance is created (see `tasks --wait`).
+    /// Wait until the server is created (see `tasks --wait`).
     #[arg(long)]
     pub wait: bool,
     /// With --wait, give up after this many seconds.
@@ -305,7 +327,7 @@ pub struct NewInstanceOpts {
 pub struct CreateArgs {
     #[arg(long, alias = "flavor")]
     pub flavour: Option<Flavour>,
-    /// The Minecraft version, or `latest`. See `instance versions <flavour>`.
+    /// The Minecraft version, or `latest`. See `server versions <flavour>`.
     #[arg(long)]
     pub version: Option<String>,
     /// Extra command line arguments for the server (needs global file permission).
@@ -348,10 +370,14 @@ pub struct CreateAtomArgs {
 #[derive(Subcommand, Debug, Clone)]
 pub enum InstanceSettingsCmd {
     /// Show every setting with its value and type.
-    Get { instance: String },
+    Get {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+    },
     /// Change a setting. KEY is a setting id (such as `max_ram` or `max-players`),
     /// `section.setting`, or `auto_start` / `restart_on_crash` with true or false.
     Set {
+        #[arg(value_name = "SERVER")]
         instance: String,
         key: String,
         #[arg(allow_hyphen_values = true)]
@@ -372,10 +398,11 @@ pub struct ConsoleArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ConsoleCmd {
-    /// Show recent output (the same as `console <instance>`).
+    /// Show recent output (the same as `console <server>`).
     Show(ConsoleShowArgs),
     /// Send a command to the server, such as `say hi` or `op Steve`.
     Send {
+        #[arg(value_name = "SERVER")]
         instance: String,
         /// The command; several words are joined with spaces. Put words that start
         /// with `-` after `--`.
@@ -386,8 +413,8 @@ pub enum ConsoleCmd {
 
 #[derive(Args, Debug, Clone)]
 pub struct ConsoleShowArgs {
-    /// The instance: its name or UUID.
-    #[arg(required = true)]
+    /// The server: its name or UUID.
+    #[arg(required = true, value_name = "SERVER")]
     pub instance: Option<String>,
     /// Keep streaming new output (reconnects if the connection drops).
     #[arg(long, short = 'f')]
@@ -405,7 +432,8 @@ pub struct ConsoleShowArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct PlayersArgs {
-    /// The instance: its name or UUID.
+    /// The server: its name or UUID.
+    #[arg(value_name = "SERVER")]
     pub instance: String,
     /// Set the maximum number of players instead.
     #[arg(long, value_name = "N")]
@@ -414,7 +442,8 @@ pub struct PlayersArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct MonitorArgs {
-    /// The instance: its name or UUID.
+    /// The server: its name or UUID.
+    #[arg(value_name = "SERVER")]
     pub instance: String,
     /// Keep printing a report every second.
     #[arg(long, short = 'f')]
@@ -425,11 +454,15 @@ pub struct MonitorArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct FilesArgs {
-    /// Use the core machine's own file system (absolute paths) instead of an instance's.
+    /// Use the core machine's own file system (absolute paths) instead of a server's.
     #[arg(long)]
     pub global: bool,
-    /// The instance (name or UUID). Omit it with --global.
-    #[arg(required_unless_present = "global", conflicts_with = "global")]
+    /// The server (name or UUID). Omit it with --global.
+    #[arg(
+        required_unless_present = "global",
+        conflicts_with = "global",
+        value_name = "SERVER"
+    )]
     pub instance: Option<String>,
     #[command(subcommand)]
     pub action: FilesCmd,
@@ -437,7 +470,7 @@ pub struct FilesArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum FilesCmd {
-    /// List a folder (default: the instance's root).
+    /// List a folder (default: the server's root).
     Ls { path: Option<String> },
     /// Print a text file (at most 16 MiB; download bigger files).
     Cat { path: String },
@@ -451,7 +484,7 @@ pub enum FilesCmd {
     Upload {
         #[arg(required = true)]
         files: Vec<PathBuf>,
-        /// The folder to upload into (default: the instance's root).
+        /// The folder to upload into (default: the server's root).
         #[arg(long, value_name = "DIR")]
         to: Option<String>,
     },
@@ -476,14 +509,14 @@ pub enum FilesCmd {
     },
     /// Move or rename a file or folder. TO is the new path, not a folder to move into.
     Mv { from: String, to: String },
-    /// Copy files or folders into a folder (instances only).
+    /// Copy files or folders into a folder (servers only).
     Cp {
         #[arg(required = true, num_args = 1..)]
         sources: Vec<String>,
         /// The folder to copy into.
         dest: String,
     },
-    /// Zip files or folders into a new archive (instances only).
+    /// Zip files or folders into a new archive (servers only).
     Zip {
         #[arg(required = true)]
         paths: Vec<String>,
@@ -494,7 +527,7 @@ pub enum FilesCmd {
         #[arg(long)]
         wait: bool,
     },
-    /// Extract an archive (instances only). Default: next to the archive.
+    /// Extract an archive (servers only). Default: next to the archive.
     Unzip {
         path: String,
         /// Extract into this folder.
@@ -516,7 +549,8 @@ pub enum FilesCmd {
 
 #[derive(Args, Debug, Clone)]
 pub struct MacrosArgs {
-    /// The instance: its name or UUID.
+    /// The server: its name or UUID.
+    #[arg(value_name = "SERVER")]
     pub instance: String,
     #[command(subcommand)]
     pub action: MacrosCmd,
@@ -524,7 +558,7 @@ pub struct MacrosArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum MacrosCmd {
-    /// List the instance's macros.
+    /// List the server's macros.
     List,
     /// Run a macro with arguments.
     Run {
@@ -594,7 +628,8 @@ pub struct PageArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct ModsArgs {
-    /// The instance: its name or UUID.
+    /// The server: its name or UUID.
+    #[arg(value_name = "SERVER")]
     pub instance: String,
     #[command(subcommand)]
     pub action: ModsCmd,
@@ -608,12 +643,12 @@ pub enum ModsCmd {
         #[arg(long)]
         check_updates: bool,
     },
-    /// Search Modrinth for mods (or plugins) for this instance. A Modrinth link shows
+    /// Search Modrinth for mods (or plugins) for this server. A Modrinth link shows
     /// that project instead.
     Search {
         #[arg(required = true, num_args = 1..)]
         query: Vec<String>,
-        /// Do not limit results to the instance's game version and loader.
+        /// Do not limit results to the server's game version and loader.
         #[arg(long)]
         all_versions: bool,
         #[command(flatten)]
@@ -627,7 +662,7 @@ pub enum ModsCmd {
         #[arg(long)]
         body: bool,
     },
-    /// Versions of a project that fit this instance.
+    /// Versions of a project that fit this server.
     Versions {
         project: String,
         /// Show every version, not only those for this game version and loader.
@@ -776,26 +811,26 @@ pub enum UsersCmd {
 pub enum PermsCmd {
     /// Show a user's permissions.
     Get { user: String },
-    /// Set one permission. For a per-instance permission VALUE is a comma-separated list
-    /// of instances (empty for none); for the others, true or false.
+    /// Set one permission. For a per-server permission VALUE is a comma-separated list
+    /// of servers (empty for none); for the others, true or false.
     Set {
         user: String,
         permission: String,
         #[arg(allow_hyphen_values = true)]
         value: String,
     },
-    /// Give a per-instance permission for instances.
+    /// Give a per-server permission for servers.
     Grant {
         user: String,
         permission: String,
-        #[arg(required = true)]
+        #[arg(required = true, value_name = "SERVERS")]
         instances: Vec<String>,
     },
-    /// Take a per-instance permission away for instances.
+    /// Take a per-server permission away for servers.
     Revoke {
         user: String,
         permission: String,
-        #[arg(required = true)]
+        #[arg(required = true, value_name = "SERVERS")]
         instances: Vec<String>,
     },
 }
@@ -856,8 +891,8 @@ pub struct CreateKeyArgs {
     /// Everything you can do, including owner or admin powers if you have them.
     #[arg(long, conflicts_with = "allow")]
     pub full: bool,
-    /// Allow one permission, as in `users perms set`: PERMISSION=INSTANCES for a
-    /// per-instance permission (comma-separated names or UUIDs), PERMISSION=true for one
+    /// Allow one permission, as in `users perms set`: PERMISSION=SERVERS for a
+    /// per-server permission (comma-separated names or UUIDs), PERMISSION=true for one
     /// of the whole core. Repeat for more. The key can never do more than you can.
     #[arg(long, value_name = "PERMISSION=VALUE")]
     pub allow: Vec<String>,
@@ -884,6 +919,7 @@ impl EventLevelArg {
 
 #[derive(ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventTypeArg {
+    #[value(name = "server", alias = "instance")]
     Instance,
     User,
     Macro,
@@ -918,8 +954,13 @@ pub struct EventsArgs {
     /// Only these event types.
     #[arg(long = "type", value_enum, value_delimiter = ',')]
     pub event_type: Vec<EventTypeArg>,
-    /// Only events of these instances.
-    #[arg(long, value_delimiter = ',')]
+    /// Only events of these servers.
+    #[arg(
+        long = "server",
+        visible_alias = "instance",
+        value_name = "SERVER",
+        value_delimiter = ','
+    )]
     pub instance: Vec<String>,
     /// Only events caused by or about these users.
     #[arg(long, value_delimiter = ',')]
@@ -958,7 +999,7 @@ pub enum PlayitCmd {
 
 #[derive(Args, Debug, Clone)]
 pub struct TasksArgs {
-    /// Wait until this task ends: a task id, or the UUID of an instance being created or
+    /// Wait until this task ends: a task id, or the UUID of a server being created or
     /// deleted. Exits 1 if the task fails.
     #[arg(long, value_name = "ID")]
     pub wait: Option<String>,

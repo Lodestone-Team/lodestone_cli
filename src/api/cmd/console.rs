@@ -104,7 +104,7 @@ async fn show_console(ctx: &Ctx, args: ConsoleShowArgs) -> CliResult<()> {
     let query = args
         .instance
         .clone()
-        .ok_or_else(|| CliError::usage("Which instance?"))?;
+        .ok_or_else(|| CliError::usage("Which server?"))?;
     let inst = resolve::instance(&conn, &query).await?;
     if !args.follow {
         let events = tail(buffer(&conn, &inst).await?, args.lines);
