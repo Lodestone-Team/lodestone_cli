@@ -7,6 +7,7 @@ pub mod config;
 pub mod error;
 pub mod events;
 pub mod http;
+pub mod keys;
 pub mod multipart;
 pub mod output;
 pub mod prompt;
@@ -15,7 +16,7 @@ pub mod tls;
 pub mod ws;
 
 use cli::{Command, GlobalOpts};
-use config::{Profile, Profiles};
+use config::{AuthKind, Profile, Profiles};
 use error::{kind, CliError, CliResult, ExitCode};
 use http::Connection;
 use output::Output;
@@ -28,10 +29,13 @@ pub const ENV_FINGERPRINT: &str = "LODESTONE_FINGERPRINT";
 pub const ENV_CA_CERT: &str = "LODESTONE_CA_CERT";
 pub const ENV_USERNAME: &str = "LODESTONE_USERNAME";
 pub const ENV_PASSWORD: &str = "LODESTONE_PASSWORD";
+pub const ENV_API_KEY: &str = "LODESTONE_API_KEY";
 
 pub struct Ctx {
     pub out: Output,
     pub global: GlobalOpts,
+    /// What the command authenticated with, once it connected; for the hints on errors.
+    pub credential: std::cell::Cell<Option<AuthKind>>,
 }
 
 /// Where the connection settings came from.
@@ -96,6 +100,13 @@ impl Ctx {
             ));
         }
         warn_plain_http(&self.out, &url);
+        self.credential.set(token.as_deref().map(|t| {
+            if keys::is_api_key(t) {
+                AuthKind::ApiKey
+            } else {
+                AuthKind::Session
+            }
+        }));
         Ok(Session {
             conn: Connection::new(url, token, trust, self.global.verbose)?,
             profile_name: profile.as_ref().map(|_| name),
@@ -131,14 +142,36 @@ pub async fn run(global: GlobalOpts, command: Command) -> i32 {
     let ctx = Ctx {
         out: Output { json: global.json },
         global,
+        credential: std::cell::Cell::new(None),
     };
     match cmd::dispatch(&ctx, command).await {
         Ok(()) => ExitCode::Success as i32,
         Err(e) => {
+            let e = with_credential_hint(e, ctx.credential.get());
             ctx.out.error(&e);
             e.exit as i32
         }
     }
+}
+
+/// The message the core gives API keys for actions that need a password login.
+const SESSION_ONLY_MESSAGE: &str = "needs a signed-in session";
+
+/// Adds a hint to errors that come from logging in with an API key: actions that need a
+/// password login, and a key that no longer works.
+pub fn with_credential_hint(mut e: CliError, credential: Option<AuthKind>) -> CliError {
+    if credential != Some(AuthKind::ApiKey) {
+        return e;
+    }
+    if e.message.contains(SESSION_ONLY_MESSAGE) {
+        e.message = format!(
+            "{}. You are logged in with an API key: log in with a password (`lodestone_cli login <url>`) to do this",
+            e.message.trim_end_matches('.')
+        );
+    } else if e.kind == error::kind::UNAUTHORIZED {
+        e.message = "The core refused the API key: it was revoked, has expired, or its user was deleted. Ask for a new key and log in again with `lodestone_cli login <url> --api-key`".to_string();
+    }
+    e
 }
 
 /// Prints a command line error (from clap) the way the API subcommands print errors, and
@@ -152,6 +185,39 @@ pub fn report_usage_error(json: bool, message: &str) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hints_for_api_key_logins() {
+        let session_only = || {
+            CliError::new(
+                "PermissionDenied",
+                "This action needs a signed-in session, not an API key",
+            )
+        };
+        let hinted = with_credential_hint(session_only(), Some(AuthKind::ApiKey));
+        assert!(
+            hinted.message.contains("log in with a password"),
+            "{}",
+            hinted.message
+        );
+        assert_eq!(hinted.kind, "PermissionDenied");
+        // sessions and other errors are left alone
+        assert_eq!(
+            with_credential_hint(session_only(), Some(AuthKind::Session)),
+            session_only()
+        );
+        let other = CliError::new("NotFound", "Instance not found");
+        assert_eq!(
+            with_credential_hint(other.clone(), Some(AuthKind::ApiKey)),
+            other
+        );
+        let revoked = with_credential_hint(
+            CliError::from_response(401, r#"{"kind":"Unauthorized","causes":["Unauthorized"]}"#),
+            Some(AuthKind::ApiKey),
+        );
+        assert!(revoked.message.contains("revoked"), "{}", revoked.message);
+        assert_eq!(revoked.exit, ExitCode::Auth);
+    }
 
     #[test]
     fn plain_http_warns_only_for_other_machines() {

@@ -96,6 +96,11 @@ pub struct ConnectArgs {
 pub struct LoginArgs {
     /// The core's address: host, host:port or a URL. Defaults to https and port 16662.
     pub url: String,
+    /// Log in with an API key instead of a password. The key is read from
+    /// LODESTONE_API_KEY, else from stdin (asked for without echo on a terminal); it is
+    /// never a command line argument.
+    #[arg(long, conflicts_with_all = ["username", "password_stdin"])]
+    pub api_key: bool,
     #[command(flatten)]
     pub connect: ConnectArgs,
 }
