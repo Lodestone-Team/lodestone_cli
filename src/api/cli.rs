@@ -75,6 +75,37 @@ pub enum Command {
     /// Extensions (owner only).
     #[command(subcommand)]
     Extension(ExtensionCmd),
+    /// The core's debug traces (owner only): its log, API requests, server states,
+    /// tasks and other events, live. Local to the core; nothing is sent anywhere else.
+    #[command(subcommand)]
+    Trace(TraceCmd),
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum TraceCmd {
+    /// The trace topics, what each says, and how many events each had.
+    Topics,
+    /// What the core is doing now: servers and their states, uptime, settings.
+    Snapshot,
+    /// Streams trace events: the last earlier ones first (--backlog), then each new one.
+    /// Patterns: `log` or `log.*` for everything under log, `*` for one segment
+    /// (`*.error`); none for everything.
+    Watch(TraceWatchArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct TraceWatchArgs {
+    /// Topic patterns, such as `log.warn`, `instance`, `*.error` (all without any).
+    pub topics: Vec<String>,
+    /// Earlier events to send first (the core keeps the last 2000).
+    #[arg(long, default_value_t = 50)]
+    pub backlog: usize,
+    /// Only earlier events after this sequence number.
+    #[arg(long)]
+    pub since: Option<u64>,
+    /// Stop after this many events.
+    #[arg(long)]
+    pub count: Option<usize>,
 }
 
 /* ---------------------------------------------------------------- login */

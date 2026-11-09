@@ -281,6 +281,28 @@ lodestone_cli --json playit tunnels
 `tasks --wait` takes a task id (such as the `task_id` of `files zip`) or the UUID of a
 server being created; it exits 1 with kind `TaskFailed` if the task fails.
 
+Debug traces (owner only): what the core is doing, without the dashboard. `snapshot` gives
+the servers and their states, uptime and settings; `topics` every topic and its event
+count; `watch` the last `--backlog` events, then live ones (console lines are live only):
+
+```sh
+lodestone_cli --json trace snapshot
+lodestone_cli --json trace topics
+lodestone_cli --json trace watch --backlog 100 --count 100
+lodestone_cli --json trace watch log.warn log.error http.error instance --backlog 50
+lodestone_cli --json trace watch instance.console --backlog 0 --count 200
+```
+
+Each line is `{"seq", "at_ms", "topic", "data"}`. Topics: `log.error`/`warn`/`info`
+(the core's log, with `target`, `message`, `fields`, `spans`; `log.debug`/`trace` live
+only), `http.request` (live only) and `http.error` (method, route, status, ms),
+`instance.state`/`warning`/`error`/`system`/`players`, `instance.console`/`input`/`chat`
+(live only), `macro.*`, `task.start`/`update`/`end`, `user.*`, `fs.operation`, `playit`,
+`settings.global`. Patterns: `log` or `log.*` for everything under log, `*.error` for one
+segment. To debug a failure the user reports, run `trace snapshot`, then
+`trace watch '*.error' log.warn http.error --backlog 200 --count 200` and read what led up
+to it.
+
 ## Workflows
 
 Create a Fabric server, add Fabric API and a mod from a Modrinth link, start it (ask the

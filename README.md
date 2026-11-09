@@ -42,6 +42,7 @@ lodestone_cli console survival --follow
 | `api-keys` | Create, list and revoke API keys |
 | `events`, `tasks` | Notifications, live events, and waiting for background tasks |
 | `playit`, `extension` | playit.gg tunnels and extensions (owner only) |
+| `trace` | The core's debug traces, live: its log, API requests, server states, tasks (owner only) |
 
 Run `lodestone_cli <command> --help` for the details.
 
@@ -58,6 +59,12 @@ Run `lodestone_cli <command> --help` for the details.
   the login accepts only that certificate. `--fingerprint` and `--ca-cert` do the same without
   a prompt.
 - **Destructive commands** ask first; `--yes` skips the question.
+- **Debug traces:** `trace snapshot`, `trace topics` and `trace watch [patterns…]` read what
+  the core is doing: its log (`log.warn`, `log.error`, …), API requests (method, route,
+  status, time), server states, players, tasks, macros and other events. Owner only. The
+  core keeps the last 2000 events in memory and sends them only to the owner's connection;
+  busy topics (console lines, every request, debug logs) only while someone watches.
+  Payloads are scrubbed of anything that looks like a password, token or key.
 
 The agent skill in [`skills/lodestone/SKILL.md`](skills/lodestone/SKILL.md) describes every
 command, the JSON output, common workflows and safety rules for AI agents.
