@@ -235,12 +235,21 @@ fn global_options_go_anywhere() {
 fn server_and_instance_both_work() {
     for word in ["server", "instance"] {
         let args = parse(&[word, "start", "survival", "--wait"]).unwrap();
-        let Some(Command::Instance(InstanceCmd::Start(power))) = args.command else {
+        let Some(Command::Instance(InstanceCmd::Start(start))) = args.command else {
             panic!("{word}")
         };
-        assert_eq!(power.instance, "survival");
-        assert!(power.wait);
+        assert_eq!(start.power.instance, "survival");
+        assert!(start.power.wait);
+        // the EULA is only accepted when asked (LS-08)
+        assert!(!start.accept_eula);
     }
+    let args = parse(&["server", "restart", "survival", "--accept-eula"]).unwrap();
+    let Some(Command::Instance(InstanceCmd::Restart(restart))) = args.command else {
+        panic!("restart")
+    };
+    assert!(restart.accept_eula);
+    // stopping has nothing to do with the EULA
+    assert!(parse(&["server", "stop", "survival", "--accept-eula"]).is_err());
     for flag in ["--server", "--instance"] {
         let args = parse(&["events", flag, "a,b"]).unwrap();
         let Some(Command::Events(events)) = args.command else {

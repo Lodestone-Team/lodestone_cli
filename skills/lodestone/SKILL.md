@@ -128,7 +128,10 @@ lodestone_cli --json server versions fabric
 lodestone_cli --json server create --flavour fabric --version 1.21.1 --name survival --max-ram 4096 --wait
 lodestone_cli --json server create-modpack https://modrinth.com/modpack/fabulously-optimized --name fo --wait
 lodestone_cli --json server create-modpack ./pack.mrpack --name mypack --inspect
+lodestone_cli --json server eula survival
+lodestone_cli --json server eula survival --accept
 lodestone_cli --json server start survival --wait
+lodestone_cli --json server start survival --accept-eula --wait
 lodestone_cli --json server stop survival --wait
 lodestone_cli --json server restart survival
 lodestone_cli --json server kill survival --yes
@@ -148,6 +151,12 @@ lodestone_cli --json server delete survival --yes
 - `server settings get` lists every setting id. `server.properties` settings (such as
   `motd`, `difficulty`, `max-players`) appear after the server has run once. Use
   `section.setting` if an id is in two sections.
+- A Minecraft server only starts once its EULA (https://aka.ms/MinecraftEULA) is accepted;
+  until then `server start` fails with kind `BadRequest`. Nothing accepts it on its own:
+  `server eula <server>` shows `{"accepted": ...}`, and `server eula <server> --accept`,
+  `--accept-eula` on `server start`/`restart`, or `--accept-eula` on `server create` /
+  `create-modpack` accept it. A server created without `--accept-eula` does not
+  `--auto-start` until it is accepted. See the safety rules before you use any of them.
 - Auto start and restart on crash are set with `--auto-start` and `--restart-on-crash` at
   creation, or later with `server settings set <server> auto_start|restart_on_crash true|false`.
 - `server create-atom --url <url> --name <name> --wait` (owner only, needs code execution)
@@ -306,14 +315,15 @@ to it.
 
 ## Workflows
 
-Create a Fabric server, add Fabric API and a mod from a Modrinth link, start it (ask the
-user about the EULA first, see the safety rules), and wait until it is up:
+Create a Fabric server, add Fabric API and a mod from a Modrinth link, start it, and wait
+until it is up. Ask the user whether they agree to the Minecraft EULA first (see the safety
+rules); `--accept-eula` is only for when they said yes:
 
 ```sh
 lodestone_cli --json server create --flavour fabric --version 1.21.1 --name survival --wait
 lodestone_cli --json mods survival install fabric-api
 lodestone_cli --json mods survival install https://modrinth.com/mod/lithium
-lodestone_cli --json server start survival
+lodestone_cli --json server start survival --accept-eula
 lodestone_cli --json console survival --follow --until "Done (" --timeout 600
 ```
 
@@ -355,9 +365,11 @@ lodestone_cli --json users perms get bob
   `macros kill`, overwriting with `files write` or `mods upload --overwrite`, and turning off
   `code-execution` (it stops all macros). Only then pass `--yes`. Without `--yes` and without a
   terminal they fail with kind `ConfirmationRequired` instead of hanging.
-- **Starting a Minecraft server accepts Mojang's EULA** (https://aka.ms/MinecraftEULA). Only
-  the user can agree to it. Ask before the first `server start`, `restart` or a creation
-  with `--auto-start`, and never write `eula=true` yourself.
+- **A Minecraft server needs Mojang's EULA accepted** (https://aka.ms/MinecraftEULA), and only
+  the user can agree to it. Ask them first, and pass `--accept-eula` or run
+  `server eula <server> --accept` only once they said yes. Never write `eula=true` yourself.
+  If `server start` fails because the EULA is not accepted, ask the user instead of
+  accepting it.
 - **Authenticate with the API key the user gave you** (`LODESTONE_URL` and `LODESTONE_TOKEN`),
   not with their password. **Never print, store or echo keys, tokens or passwords**, never
   pass them as command line arguments, and never create or revoke API keys unless the user

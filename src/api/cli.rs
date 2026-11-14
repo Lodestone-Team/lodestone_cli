@@ -272,12 +272,23 @@ pub enum InstanceCmd {
         /// The container's name.
         container: String,
     },
-    /// Start a server. Starting a Minecraft server accepts Mojang's EULA.
-    Start(PowerArgs),
+    /// Start a server. A Minecraft server only starts once its EULA is accepted (see
+    /// `server eula` and --accept-eula).
+    Start(StartArgs),
     /// Stop a server.
     Stop(PowerArgs),
     /// Restart a server.
-    Restart(PowerArgs),
+    Restart(StartArgs),
+    /// Whether a server's Minecraft EULA (https://aka.ms/MinecraftEULA) is accepted. A
+    /// server only starts once it is. With --accept, agree to it.
+    Eula {
+        #[arg(value_name = "SERVER")]
+        instance: String,
+        /// Agree to Mojang's Minecraft EULA for this server. Only the user can agree to
+        /// it: pass this only when they did.
+        #[arg(long)]
+        accept: bool,
+    },
     /// Kill a server's process without saving.
     Kill {
         #[arg(value_name = "SERVER")]
@@ -324,6 +335,17 @@ pub struct PowerArgs {
     pub timeout: u64,
 }
 
+#[derive(Args, Debug, Clone)]
+pub struct StartArgs {
+    #[command(flatten)]
+    pub power: PowerArgs,
+    /// Agree to Mojang's Minecraft EULA (https://aka.ms/MinecraftEULA) for this server
+    /// before starting it, as `server eula --accept` does. Only the user can agree to it:
+    /// pass this only when they did.
+    #[arg(long)]
+    pub accept_eula: bool,
+}
+
 #[derive(Args, Debug, Clone, Default)]
 pub struct NewInstanceOpts {
     /// The server's name.
@@ -368,6 +390,12 @@ pub struct CreateArgs {
     /// Ask for every setting, even those given as options.
     #[arg(long, short = 'i')]
     pub interactive: bool,
+    /// Agree to Mojang's Minecraft EULA (https://aka.ms/MinecraftEULA) for the new
+    /// server. Without it the server is created but does not start (nor --auto-start)
+    /// until the EULA is accepted with `server eula --accept`. Only the user can agree to
+    /// it: pass this only when they did.
+    #[arg(long)]
+    pub accept_eula: bool,
     #[command(flatten)]
     pub opts: NewInstanceOpts,
 }
@@ -383,6 +411,12 @@ pub struct CreateModpackArgs {
     /// Only show what the pack contains; create nothing.
     #[arg(long)]
     pub inspect: bool,
+    /// Agree to Mojang's Minecraft EULA (https://aka.ms/MinecraftEULA) for the new
+    /// server. Without it the server is created but does not start (nor --auto-start)
+    /// until the EULA is accepted with `server eula --accept`. Only the user can agree to
+    /// it: pass this only when they did.
+    #[arg(long)]
+    pub accept_eula: bool,
     #[command(flatten)]
     pub opts: NewInstanceOpts,
 }

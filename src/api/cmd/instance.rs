@@ -7,7 +7,7 @@ use serde_json::{json, Map, Value};
 
 use crate::api::cli::{
     CreateArgs, CreateAtomArgs, CreateModpackArgs, Flavour, InstanceCmd, InstanceSettingsCmd,
-    NewInstanceOpts, PowerArgs,
+    NewInstanceOpts, PowerArgs, StartArgs,
 };
 use crate::api::error::{kind, CliError, CliResult};
 use crate::api::events::{Target, TaskWaiter};
@@ -115,9 +115,50 @@ pub async fn run(ctx: &Ctx, cmd: InstanceCmd) -> CliResult<()> {
             );
             Ok(())
         }
-        InstanceCmd::Start(args) => power(ctx, &conn, args, "start").await,
-        InstanceCmd::Stop(args) => power(ctx, &conn, args, "stop").await,
-        InstanceCmd::Restart(args) => power(ctx, &conn, args, "restart").await,
+        InstanceCmd::Start(args) => start(ctx, &conn, args, "start").await,
+        InstanceCmd::Stop(args) => {
+            let inst = resolve::instance(&conn, &args.instance).await?;
+            power(ctx, &conn, &inst, &args, "stop").await
+        }
+        InstanceCmd::Restart(args) => start(ctx, &conn, args, "restart").await,
+        InstanceCmd::Eula { instance, accept } => {
+            let inst = resolve::instance(&conn, &instance).await?;
+            let route = ["instance", inst.uuid.as_str(), "eula"];
+            let status = if accept {
+                conn.put(&route, Body::Empty).await
+            } else {
+                conn.get(&route).await
+            }
+            .map_err(|e| {
+                if is_missing_route(&e) {
+                    CliError::new(
+                        kind::UNSUPPORTED,
+                        "This core is too old to track the Minecraft EULA: it accepts it when a server starts",
+                    )
+                } else {
+                    e
+                }
+            })?;
+            let accepted = status["accepted"].as_bool().unwrap_or(accept);
+            let result = json!({"uuid": inst.uuid, "accepted": accepted});
+            if accept {
+                ctx.out
+                    .done(format!("Accepted the Minecraft EULA for {inst}"), result);
+            } else {
+                ctx.out.show(&result, || {
+                    if accepted {
+                        println!("{inst} has the Minecraft EULA accepted");
+                    } else {
+                        println!(
+                            "{inst} does not have the Minecraft EULA ({EULA_URL}) accepted, so it cannot start. \
+                             To agree to it, run `lodestone_cli server eula {} --accept`",
+                            shell_word(&inst)
+                        );
+                    }
+                });
+            }
+            Ok(())
+        }
         InstanceCmd::Kill { instance } => {
             let inst = resolve::instance(&conn, &instance).await?;
             prompt::confirm(
@@ -225,9 +266,52 @@ pub async fn run(ctx: &Ctx, cmd: InstanceCmd) -> CliResult<()> {
     }
 }
 
+/// Where users read the Minecraft EULA.
+const EULA_URL: &str = "https://aka.ms/MinecraftEULA";
+
 /// A route the core does not have answers a bare 404: older cores lack the newer routes.
+fn is_missing_route(e: &CliError) -> bool {
+    e.kind == kind::NOT_FOUND && e.message.starts_with("The core answered HTTP")
+}
+
+/// An instance's name for a command the user can paste: quoted when it has spaces or
+/// other characters a shell would split or expand.
+fn shell_word(inst: &InstanceRef) -> String {
+    let word = if inst.name.is_empty() {
+        &inst.uuid
+    } else {
+        &inst.name
+    };
+    if !word.is_empty()
+        && word
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+    {
+        word.clone()
+    } else {
+        format!("'{}'", word.replace('\'', "'\\''"))
+    }
+}
+
+/// The core refuses to start a Minecraft server whose EULA is not accepted. Its message
+/// says so; this adds how to accept it from the CLI.
+fn eula_hint(e: CliError, inst: &InstanceRef) -> CliError {
+    if e.kind == kind::BAD_REQUEST && e.message.contains("EULA") {
+        CliError {
+            message: format!(
+                "{} To agree to it, run `lodestone_cli server eula {} --accept`, or start with --accept-eula.",
+                e.message.trim_end(),
+                shell_word(inst)
+            ),
+            ..e
+        }
+    } else {
+        e
+    }
+}
+
 fn older_core_error(e: CliError, route: &str) -> CliError {
-    if e.kind == kind::NOT_FOUND && e.message.starts_with("The core answered HTTP") {
+    if is_missing_route(&e) {
         CliError::new(
             kind::UNSUPPORTED,
             format!("This core is too old to change {route} after creation; update Lodestone Core"),
@@ -336,10 +420,35 @@ pub fn find_setting(manifest: &Value, key: &str) -> CliResult<(String, String, V
 
 /* ---------------------------------------------------------- power */
 
-async fn power(ctx: &Ctx, conn: &Connection, args: PowerArgs, action: &str) -> CliResult<()> {
-    let inst = resolve::instance(conn, &args.instance).await?;
+/// Starts or restarts a server, first accepting its Minecraft EULA with --accept-eula.
+async fn start(ctx: &Ctx, conn: &Connection, args: StartArgs, action: &str) -> CliResult<()> {
+    let inst = resolve::instance(conn, &args.power.instance).await?;
+    if args.accept_eula {
+        match conn
+            .put(&["instance", &inst.uuid, "eula"], Body::Empty)
+            .await
+        {
+            Ok(_) => ctx
+                .out
+                .note(format!("Accepted the Minecraft EULA for {inst}")),
+            // Older cores have no EULA route: they accept the EULA when a server starts.
+            Err(e) if is_missing_route(&e) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    power(ctx, conn, &inst, &args.power, action).await
+}
+
+async fn power(
+    ctx: &Ctx,
+    conn: &Connection,
+    inst: &InstanceRef,
+    args: &PowerArgs,
+    action: &str,
+) -> CliResult<()> {
     conn.put(&["instance", &inst.uuid, action], Body::Empty)
-        .await?;
+        .await
+        .map_err(|e| eula_hint(e, inst))?;
     let past = match action {
         "start" => "Starting",
         "stop" => "Stopping",
@@ -359,7 +468,7 @@ async fn power(ctx: &Ctx, conn: &Connection, args: PowerArgs, action: &str) -> C
     };
     ctx.out
         .note(format!("{past} {inst}, waiting until it is {target}"));
-    let state = wait_for_state(conn, &inst, target, Duration::from_secs(args.timeout)).await?;
+    let state = wait_for_state(conn, inst, target, Duration::from_secs(args.timeout)).await?;
     ctx.out.done(
         format!("{inst} is {state}"),
         json!({"uuid": inst.uuid, "action": action, "state": state}),
@@ -518,19 +627,53 @@ fn setup_value(opts: &NewInstanceOpts, name: &str, sections: Value) -> Value {
     })
 }
 
+/// Adds `accept_eula: true` to a creation body when the user agreed to the Minecraft EULA
+/// (--accept-eula). Without it nothing is sent, and the core creates the server with the
+/// EULA not accepted: only the user can agree to it, so the CLI never does on its own.
+fn with_eula(mut body: Value, accept_eula: bool) -> Value {
+    if accept_eula {
+        body["accept_eula"] = json!(true);
+    }
+    body
+}
+
 /// Prints the result of starting an instance creation, waiting for it with `--wait`.
+/// With `eula_pending` (a Minecraft server created without --accept-eula) it also says
+/// how to accept the EULA, which the server needs to start.
 async fn report_creation(
     ctx: &Ctx,
     conn: &Connection,
     uuid: &str,
     name: &str,
     opts: &NewInstanceOpts,
+    eula_pending: bool,
 ) -> CliResult<()> {
+    let eula_note = || {
+        if !eula_pending {
+            return;
+        }
+        let inst = InstanceRef {
+            uuid: uuid.to_string(),
+            name: name.to_string(),
+        };
+        let message = format!(
+            "{name} cannot start until the Minecraft EULA ({EULA_URL}) is accepted{}. To agree to it, run `lodestone_cli server eula {} --accept`.",
+            if opts.auto_start { ", so it will not start on its own yet" } else { "" },
+            shell_word(&inst)
+        );
+        // --auto-start does nothing until then, which scripts should hear about too
+        if opts.auto_start {
+            ctx.out.warn(message);
+        } else {
+            ctx.out.note(message);
+        }
+    };
     if !opts.wait {
         ctx.out.done(
             format!("Creating {name} ({uuid}). Follow it with `lodestone_cli tasks --wait {uuid}`"),
             json!({"uuid": uuid, "name": name, "state": "creating"}),
         );
+        eula_note();
         return Ok(());
     }
     ctx.out.note(format!("Creating {name} ({uuid})..."));
@@ -547,6 +690,7 @@ async fn report_creation(
         format!("Created {name} ({uuid}). {message}"),
         json!({"uuid": uuid, "name": name, "state": "created", "task": task.to_json()}),
     );
+    eula_note();
     Ok(())
 }
 
@@ -685,7 +829,10 @@ async fn create(ctx: &Ctx, conn: &Connection, args: CreateArgs) -> CliResult<()>
             _ => Value::Null,
         },
     );
-    let body = setup_value(&args.opts, &name, setup_sections(&manifest, &values));
+    let body = with_eula(
+        setup_value(&args.opts, &name, setup_sections(&manifest, &values)),
+        args.accept_eula,
+    );
     let uuid = conn
         .post(
             &["instance", "create", flavour.game_type()],
@@ -696,7 +843,7 @@ async fn create(ctx: &Ctx, conn: &Connection, args: CreateArgs) -> CliResult<()>
         .as_str()
         .ok_or_else(|| CliError::bad_response("The core did not return the new server's UUID"))?
         .to_string();
-    report_creation(ctx, conn, &uuid, &name, &args.opts).await
+    report_creation(ctx, conn, &uuid, &name, &args.opts, !args.accept_eula).await
 }
 
 /// The pack to create an instance from.
@@ -809,6 +956,7 @@ async fn create_modpack(ctx: &Ctx, conn: &Connection, args: CreateModpackArgs) -
             body[key] = value;
         }
     }
+    let body = with_eula(body, args.accept_eula);
     let uuid = conn
         .post(&["instance", "create_modpack"], Body::Json(body))
         .await?;
@@ -816,7 +964,7 @@ async fn create_modpack(ctx: &Ctx, conn: &Connection, args: CreateModpackArgs) -
         .as_str()
         .ok_or_else(|| CliError::bad_response("The core did not return the new server's UUID"))?
         .to_string();
-    report_creation(ctx, conn, &uuid, &name, &args.opts).await
+    report_creation(ctx, conn, &uuid, &name, &args.opts, !args.accept_eula).await
 }
 
 fn print_pack(info: &Value) {
@@ -866,7 +1014,8 @@ async fn create_atom(ctx: &Ctx, conn: &Connection, args: CreateAtomArgs) -> CliR
         .post(&["instance", "create_generic"], Body::Json(body))
         .await?;
     match uuid.as_str() {
-        Some(uuid) => report_creation(ctx, conn, uuid, &name, &args.opts).await,
+        // atom servers aren't Minecraft servers, so they have no EULA
+        Some(uuid) => report_creation(ctx, conn, uuid, &name, &args.opts, false).await,
         None => {
             // older cores return nothing, so there is nothing to wait for
             if args.opts.wait {
@@ -949,6 +1098,43 @@ mod tests {
         assert_eq!(default_version(&json!({}), &[]), None);
         assert!(is_release("1.21.4") && is_release("26.1"));
         assert!(!is_release("1.21.9-pre1") && !is_release("25w45a") && !is_release("1"));
+    }
+
+    #[test]
+    fn the_eula_is_only_accepted_when_asked() {
+        let body = setup_value(&NewInstanceOpts::default(), "x", json!({}));
+        assert!(with_eula(body.clone(), false).get("accept_eula").is_none());
+        assert_eq!(with_eula(body, true)["accept_eula"], true);
+    }
+
+    #[test]
+    fn eula_errors_say_how_to_accept() {
+        let inst = InstanceRef {
+            uuid: "INSTANCE_1".into(),
+            name: "My World".into(),
+        };
+        let e = CliError::from_response(
+            400,
+            r#"{"kind":"BadRequest","causes":["Accept the Minecraft EULA (https://aka.ms/MinecraftEULA) before you start this server."]}"#,
+        );
+        let e = eula_hint(e, &inst);
+        assert_eq!(e.kind, "BadRequest");
+        assert!(
+            e.message.ends_with(
+                "run `lodestone_cli server eula 'My World' --accept`, or start with --accept-eula."
+            ),
+            "{}",
+            e.message
+        );
+        let other = CliError::new(kind::BAD_REQUEST, "Port in use");
+        assert_eq!(eula_hint(other.clone(), &inst), other);
+        let named = |name: &str| InstanceRef {
+            uuid: "INSTANCE_1".into(),
+            name: name.into(),
+        };
+        assert_eq!(shell_word(&named("survival-2")), "survival-2");
+        assert_eq!(shell_word(&named("it's")), "'it'\\''s'");
+        assert_eq!(shell_word(&named("")), "INSTANCE_1");
     }
 
     #[test]
