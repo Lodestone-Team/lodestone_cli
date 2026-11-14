@@ -426,6 +426,33 @@ fn version_options(manifest: &Value) -> CliResult<Vec<String>> {
         .unwrap_or_default())
 }
 
+/// Whether `version` names a release, like `1.21.4` or `26.1`: numbers and dots only, as
+/// in the core. Snapshots (`25w45a`, `26.1-snapshot-1`), pre-releases (`1.21.9-pre1`) and
+/// release candidates (`1.21.9-rc1`) aren't.
+fn is_release(version: &str) -> bool {
+    let mut parts = version.split('.');
+    let count = parts.clone().count();
+    count >= 2 && parts.all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// The version `latest` (and the default) stands for: the newest release, not a snapshot
+/// or pre-release, since those can break worlds and most mods don't support them yet. The
+/// core's form default is used when it is a release; cores before it picked releases
+/// defaulted to the first option, which can be a snapshot, so the CLI then looks for the
+/// newest release itself. With no release listed at all, the core's default or the newest
+/// version is used.
+fn default_version(manifest: &Value, versions: &[String]) -> Option<String> {
+    let core_default = setup_setting(manifest, "version")
+        .and_then(|(_, s)| s["value"]["value"].as_str())
+        .filter(|v| versions.iter().any(|o| o == v));
+    core_default
+        .filter(|v| is_release(v))
+        .or_else(|| versions.iter().map(String::as_str).find(|v| is_release(v)))
+        .or(core_default)
+        .or_else(|| versions.first().map(String::as_str))
+        .map(str::to_string)
+}
+
 fn setup_setting<'a>(manifest: &'a Value, id: &str) -> Option<(&'a str, &'a Value)> {
     manifest["setting_sections"]
         .as_object()?
@@ -545,9 +572,7 @@ async fn create(ctx: &Ctx, conn: &Connection, args: CreateArgs) -> CliResult<()>
     };
     let manifest = conn.get(&["setup_manifest", flavour.game_type()]).await?;
     let versions = version_options(&manifest)?;
-    let newest = versions
-        .first()
-        .cloned()
+    let newest = default_version(&manifest, &versions)
         .ok_or_else(|| CliError::bad_response("The core lists no versions"))?;
     let version = match args.version.as_deref() {
         Some(v) if !ask_all => v.to_string(),
@@ -895,6 +920,35 @@ mod tests {
             })
         );
         assert_eq!(version_options(&manifest()).unwrap(), ["1.21.1", "1.20.1"]);
+    }
+
+    fn version_manifest(default: &str, options: &[&str]) -> Value {
+        json!({"setting_sections": {"section_1": {"settings": {
+            "version": {"value": {"type": "Enum", "value": default}, "value_type": {"type": "Enum", "options": options}}
+        }}}})
+    }
+
+    #[test]
+    fn latest_is_the_newest_release() {
+        let options = ["26.4-snapshot-8", "26.3-rc1", "26.3", "26.2", "25w45a"];
+        let versions: Vec<String> = options.iter().map(|v| v.to_string()).collect();
+        // the core's default when it is a release
+        let m = version_manifest("26.3", &options);
+        assert_eq!(default_version(&m, &versions).unwrap(), "26.3");
+        // older cores defaulted to the first option, a snapshot (LS-73)
+        let m = version_manifest("26.4-snapshot-8", &options);
+        assert_eq!(default_version(&m, &versions).unwrap(), "26.3");
+        // no default at all
+        let m = json!({"setting_sections": {}});
+        assert_eq!(default_version(&m, &versions).unwrap(), "26.3");
+        // only snapshots: the core's default, else the newest
+        let snapshots = vec!["25w46a".to_string(), "25w45a".to_string()];
+        let m = version_manifest("25w45a", &["25w46a", "25w45a"]);
+        assert_eq!(default_version(&m, &snapshots).unwrap(), "25w45a");
+        assert_eq!(default_version(&json!({}), &snapshots).unwrap(), "25w46a");
+        assert_eq!(default_version(&json!({}), &[]), None);
+        assert!(is_release("1.21.4") && is_release("26.1"));
+        assert!(!is_release("1.21.9-pre1") && !is_release("25w45a") && !is_release("1"));
     }
 
     #[test]

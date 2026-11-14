@@ -358,7 +358,8 @@ pub struct NewInstanceOpts {
 pub struct CreateArgs {
     #[arg(long, alias = "flavor")]
     pub flavour: Option<Flavour>,
-    /// The Minecraft version, or `latest`. See `server versions <flavour>`.
+    /// The Minecraft version, or `latest` (the default): the newest release, not a
+    /// snapshot or pre-release. See `server versions <flavour>`.
     #[arg(long)]
     pub version: Option<String>,
     /// Extra command line arguments for the server (needs global file permission).

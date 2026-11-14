@@ -142,7 +142,8 @@ lodestone_cli --json server settings set survival restart_on_crash true
 lodestone_cli --json server delete survival --yes
 ```
 
-- Flavours: `vanilla`, `fabric`, `forge`, `paper`. `--version latest` is the default.
+- Flavours: `vanilla`, `fabric`, `forge`, `paper`. `--version latest` is the default: the
+  newest release, not a snapshot or pre-release (name one to get it).
   Without `--port` the first free port from 25565 is used.
 - `server settings get` lists every setting id. `server.properties` settings (such as
   `motd`, `difficulty`, `max-players`) appear after the server has run once. Use
