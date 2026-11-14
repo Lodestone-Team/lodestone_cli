@@ -95,14 +95,14 @@ pub fn pick_version(versions: &[Value], wanted: Option<&str>) -> CliResult<Strin
 }
 
 /// The Modrinth loaders whose versions an instance loader accepts (Paper runs Bukkit and
-/// Spigot plugins, as the core's install check does).
-pub fn accepted_loaders(loader: &str) -> Vec<&'static str> {
+/// Spigot plugins, as the core's install check does). Any other loader (Fabric, Forge,
+/// NeoForge, and whatever the core adds later) accepts its own versions, as in the core,
+/// so a new server type works without a CLI release.
+pub fn accepted_loaders(loader: &str) -> Vec<&str> {
     match loader {
         "paper" => vec!["paper", "spigot", "bukkit"],
         "spigot" => vec!["spigot", "bukkit"],
-        "fabric" => vec!["fabric"],
-        "forge" => vec!["forge"],
-        _ => vec![],
+        other => vec![other],
     }
 }
 
@@ -843,6 +843,11 @@ mod tests {
         let f = json!({"loaders": ["fabric", "quilt"], "game_versions": ["1.21.1"]});
         assert!(is_compatible(&f, "fabric", "1.21.1"));
         assert!(!is_compatible(&f, "forge", "1.21.1"));
+        // NeoForge servers report the loader "neoforge" (LS-72).
+        let n = json!({"loaders": ["neoforge"], "game_versions": ["1.21.1"]});
+        assert!(is_compatible(&n, "neoforge", "1.21.1"));
+        assert!(!is_compatible(&n, "forge", "1.21.1"));
+        assert!(!is_compatible(&f, "neoforge", "1.21.1"));
     }
 
     #[test]

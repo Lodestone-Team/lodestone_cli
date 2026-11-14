@@ -230,6 +230,200 @@ fn start_and_wait_until_running() {
     assert!(polls.load(Ordering::SeqCst) >= 2);
 }
 
+/// A core that keeps a server's EULA state like the real one: starting fails until it is
+/// accepted (LS-08).
+fn eula_core(accepted: Arc<AtomicUsize>) -> impl Fn(&Request) -> Reply + Send + Sync + 'static {
+    move |req| {
+        let eula = format!("/api/v1/instance/{SURVIVAL}/eula");
+        let start = format!("/api/v1/instance/{SURVIVAL}/start");
+        match (req.method.as_str(), req.path.as_str()) {
+            ("GET", "/api/v1/instance/list") => Reply::ok(instance_list()),
+            ("GET", p) if p == eula => {
+                Reply::ok(json!({"accepted": accepted.load(Ordering::SeqCst) > 0}))
+            }
+            ("PUT", p) if p == eula => {
+                accepted.store(1, Ordering::SeqCst);
+                Reply::ok(json!({"accepted": true}))
+            }
+            ("PUT", p) if p == start => {
+                if accepted.load(Ordering::SeqCst) > 0 {
+                    Reply::ok(Value::Null)
+                } else {
+                    Reply::error(
+                        400,
+                        "BadRequest",
+                        "Accept the Minecraft EULA (https://aka.ms/MinecraftEULA) before you start this server. A Minecraft server only runs after you agree to it.",
+                    )
+                }
+            }
+            _ => Reply::error(404, "NotFound", "Not found"),
+        }
+    }
+}
+
+#[test]
+fn starting_needs_the_eula_accepted_and_never_accepts_it_on_its_own() {
+    let accepted = Arc::new(AtomicUsize::new(0));
+    let server = MockServer::start(eula_core(accepted.clone()));
+    let cli = Cli::with_env(&server);
+    let eula = format!("/api/v1/instance/{SURVIVAL}/eula");
+
+    // a plain start does not accept the EULA, and the error says how to
+    let run = cli.run(&["server", "start", "survival", "--json"]);
+    assert_eq!(run.code, 1);
+    let error = run.error_json();
+    assert_eq!(error["error"]["kind"], "BadRequest");
+    let message = error["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("server eula Survival --accept") && message.contains("--accept-eula"),
+        "{message}"
+    );
+    assert!(server.requests_to("PUT", &eula).is_empty());
+
+    let run = cli.run(&["server", "eula", "survival", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(run.json(), json!({"uuid": SURVIVAL, "accepted": false}));
+    assert!(server.requests_to("PUT", &eula).is_empty());
+
+    // --accept-eula accepts it before starting
+    let run = cli.run(&["server", "start", "survival", "--accept-eula", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(server.requests_to("PUT", &eula).len(), 1);
+    let order: Vec<String> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.method == "PUT")
+        .map(|r| r.path)
+        .collect();
+    assert_eq!(
+        order.last().unwrap(),
+        &format!("/api/v1/instance/{SURVIVAL}/start")
+    );
+    assert_eq!(order[order.len() - 2], eula);
+
+    // and so does `server eula --accept`
+    accepted.store(0, Ordering::SeqCst);
+    let run = cli.run(&["server", "eula", "survival", "--accept", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        run.json(),
+        json!({"ok": true, "uuid": SURVIVAL, "accepted": true})
+    );
+    assert_eq!(server.requests_to("PUT", &eula).len(), 2);
+}
+
+#[test]
+fn eula_on_an_older_core() {
+    // older cores have no EULA route (a bare 404) and accept it when a server starts
+    let server = MockServer::start(|req| match (req.method.as_str(), req.path.as_str()) {
+        ("GET", "/api/v1/instance/list") => Reply::ok(instance_list()),
+        ("PUT", p) if p.ends_with("/start") => Reply::ok(Value::Null),
+        _ => Reply::Text(404, String::new()),
+    });
+    let cli = Cli::with_env(&server);
+    let run = cli.run(&["server", "restart", "survival", "--accept-eula", "--json"]);
+    assert_eq!(run.code, 1);
+    // restart is a 404 here too, which is not about the EULA
+    assert_eq!(run.error_json()["error"]["kind"], "NotFound");
+    let run = cli.run(&["server", "start", "survival", "--accept-eula", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let run = cli.run(&["server", "eula", "survival", "--json"]);
+    assert_eq!(run.code, 1);
+    assert_eq!(run.error_json()["error"]["kind"], "UnsupportedOperation");
+}
+
+fn create_core(req: &Request) -> Reply {
+    match (req.method.as_str(), req.path.as_str()) {
+        ("GET", "/api/v1/setup_manifest/MinecraftFabric") => {
+            Reply::ok(json!({"setting_sections": {
+                "section_1": {"settings": {
+                    "version": {"value": {"type": "Enum", "value": "1.21.1"}, "value_type": {"type": "Enum", "options": ["1.21.2-rc1", "1.21.1"]}},
+                    "port": {"value": {"type": "UnsignedInteger", "value": 25565}, "value_type": {"type": "UnsignedInteger"}}
+                }}
+            }}))
+        }
+        ("GET", p) if p.starts_with("/api/v1/check/port/") => {
+            Reply::ok(json!({"is_in_use": false, "is_allocated": false}))
+        }
+        ("POST", "/api/v1/instance/create/MinecraftFabric") => Reply::ok(json!("INSTANCE_new")),
+        ("POST", "/api/v1/instance/create_modpack") => Reply::ok(json!("INSTANCE_pack")),
+        ("GET", "/api/v1/modrinth/version/abcdefgh") => Reply::ok(json!({"id": "abcdefgh"})),
+        ("POST", "/api/v1/modpack/inspect") => {
+            Reply::ok(json!({"name": "Pack", "unsupported_reason": null}))
+        }
+        _ => Reply::error(404, "NotFound", "Not found"),
+    }
+}
+
+#[test]
+fn creating_accepts_the_eula_only_with_the_flag() {
+    let server = MockServer::start(create_core);
+    let cli = Cli::with_env(&server);
+    let create = "/api/v1/instance/create/MinecraftFabric";
+
+    let run = cli.run(&[
+        "server",
+        "create",
+        "--flavour",
+        "fabric",
+        "--name",
+        "survival",
+        "--auto-start",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let body = server.requests_to("POST", create)[0].json();
+    assert!(body.get("accept_eula").is_none(), "{body}");
+    // --auto-start does nothing until the EULA is accepted, so the CLI warns
+    assert!(
+        run.stderr.contains("server eula survival --accept"),
+        "{}",
+        run.stderr
+    );
+    // the default version is the newest release, not the release candidate (LS-73)
+    assert_eq!(
+        body["setting_sections"]["section_1"]["settings"]["version"]["value"]["value"],
+        "1.21.1"
+    );
+
+    let run = cli.run(&[
+        "server",
+        "create",
+        "--flavour",
+        "fabric",
+        "--name",
+        "survival",
+        "--accept-eula",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        server.requests_to("POST", create)[1].json()["accept_eula"],
+        true
+    );
+    assert!(!run.stderr.contains("EULA"), "{}", run.stderr);
+
+    let modpack = "/api/v1/instance/create_modpack";
+    let run = cli.run(&["server", "create-modpack", "abcdefgh", "--json"]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert!(server.requests_to("POST", modpack)[0]
+        .json()
+        .get("accept_eula")
+        .is_none());
+    let run = cli.run(&[
+        "server",
+        "create-modpack",
+        "abcdefgh",
+        "--accept-eula",
+        "--json",
+    ]);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    assert_eq!(
+        server.requests_to("POST", modpack)[1].json()["accept_eula"],
+        true
+    );
+}
+
 #[test]
 fn destructive_commands_need_confirmation() {
     let server = MockServer::start(|req| match (req.method.as_str(), req.path.as_str()) {
@@ -527,6 +721,37 @@ fn console_event(message: &str, snowflake: u64) -> Value {
     json!({"event_inner": {"type": "InstanceEvent", "instance_uuid": SURVIVAL, "instance_name": "Survival",
                            "instance_event_inner": {"type": "InstanceOutput", "message": message}},
            "details": "", "snowflake": snowflake.to_string(), "level": "Info", "caused_by": {"type": "System"}})
+}
+
+#[test]
+fn streams_end_quietly_when_stdout_closes() {
+    // `lodestone_cli --json monitor survival --follow | head -n 1` (LS-74): once the reader
+    // is gone the stream must end, not reconnect forever (JSON) or panic (text)
+    let server = MockServer::start(|req| match req.path.as_str() {
+        "/api/v1/instance/list" => Reply::ok(instance_list()),
+        p if p.starts_with("/api/v1/monitor/") => Reply::WebSocket(vec![
+            json!({"cpu_usage": 1.0, "memory_usage": 1024, "disk_usage": null, "start_time": null}),
+            json!({"cpu_usage": 2.0, "memory_usage": 2048, "disk_usage": null, "start_time": null}),
+        ]),
+        p if p.ends_with("/console/buffer") => Reply::ok(json!([console_event("Loading", 1)])),
+        p if p.ends_with("/console/stream") => {
+            Reply::WebSocket(vec![console_event("Done", 2), console_event("after", 3)])
+        }
+        _ => Reply::error(404, "NotFound", "Not found"),
+    });
+    let cli = Cli::with_env(&server);
+    for args in [
+        &["monitor", "survival", "--follow", "--json"][..],
+        &["monitor", "survival", "--follow"],
+        &["console", "survival", "--follow", "--json"],
+        &["console", "survival", "--follow"],
+    ] {
+        let (code, stderr) = cli
+            .run_with_closed_stdout(args, std::time::Duration::from_secs(30))
+            .unwrap_or_else(|| panic!("{args:?} kept running after stdout closed"));
+        assert_eq!(code, 0, "{args:?}: {stderr}");
+        assert!(!stderr.contains("panicked"), "{args:?}: {stderr}");
+    }
 }
 
 #[test]

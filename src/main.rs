@@ -130,6 +130,36 @@ fn prompt_for_confirmation(message: impl Display, predicate: impl FnOnce(String)
     predicate(input)
 }
 
+/// Whether the CLI should look for a newer version of itself on GitHub first: not with
+/// --skip-update-check, which promises no update checks at all, and not to list the core's
+/// versions or uninstall, which don't need a newer CLI.
+fn should_self_update(args: &Args) -> bool {
+    !args.skip_update_check && !args.list_versions && !args.uninstall
+}
+
+/// The CLI release to update to, newest first as GitHub lists them, and its build for this
+/// platform (`bin_name`): `None` when `current` is up to date. A release without a build
+/// for this platform (one platform's build can fail while the others publish) is skipped
+/// for the newest one that has it; with none at all this is an error, not a panic.
+fn cli_update(
+    releases: &[self_update::update::Release],
+    bin_name: &str,
+    current: &semver::Version,
+) -> Result<Option<(semver::Version, self_update::update::ReleaseAsset)>> {
+    let (release, asset) = releases
+        .iter()
+        .find_map(|release| {
+            release
+                .asset_for(bin_name, None)
+                .map(|asset| (release, asset))
+        })
+        .ok_or_else(|| {
+            color_eyre::eyre::eyre!("no lodestone_cli release has a build named {bin_name}")
+        })?;
+    let version: semver::Version = VersionWithV::from_str(&release.version)?.into();
+    Ok((version > *current).then_some((version, asset)))
+}
+
 async fn self_update() -> Result<()> {
     let bin_name = format!(
         "lodestone_cli_{os}_{aarch}",
@@ -142,19 +172,17 @@ async fn self_update() -> Result<()> {
             .repo_name("lodestone_cli")
             .build()?
             .fetch()?;
-        let latest = releases[0].asset_for(&bin_name, None).unwrap();
-        let latest_sem_ver: semver::Version = VersionWithV::from_str(&releases[0].version)?.into();
         let current_sem_ver = VERSION.with(|v| v.clone());
-        if latest_sem_ver <= current_sem_ver {
+        let Some((latest_sem_ver, latest)) = cli_update(&releases, &bin_name, &current_sem_ver)?
+        else {
             info!("CLI is up to date");
             return Ok(());
-        } else {
-            info!(
-                "Updating CLI from {current} to {latest}",
-                latest = latest_sem_ver,
-                current = current_sem_ver
-            );
-        }
+        };
+        info!(
+            "Updating CLI from {current} to {latest}",
+            latest = latest_sem_ver,
+            current = current_sem_ver
+        );
 
         // create temp dir under the current directory
         let temp_dir = tempfile::tempdir_in(std::env::current_dir()?)?;
@@ -179,8 +207,8 @@ async fn self_update() -> Result<()> {
         info!("CLI updated successfully, changes will take effect after restart");
         Ok(())
     })
-    .await
-    .unwrap()
+    // a panic in the update is reported like any other failure, and the run goes on
+    .await?
 }
 
 /// Parses the command line. Errors in a subcommand's arguments are printed like other
@@ -220,8 +248,24 @@ async fn main() {
 
     info!("Lodestone CLI v{}", VERSION.with(|v| v.to_string()));
 
-    if let Err(e) = self_update().await {
-        error!("Failed to self update: {e}");
+    // The args (with args.json) come first: --skip-update-check skips the CLI's own
+    // update check too.
+    let args = match read_args_from_file() {
+        Some(mut args) => {
+            info!(
+                "{}",
+                "Detected a valid args.json file. Performing a merge of command line args and args.json"
+            );
+            args.merge(Args::parse());
+            args
+        }
+        None => Args::parse(),
+    };
+
+    if should_self_update(&args) {
+        if let Err(e) = self_update().await {
+            error!("Failed to self update: {e}");
+        }
     }
 
     if executable_name_without_version().is_none() {
@@ -246,17 +290,6 @@ async fn main() {
         }
         info!("Proceeding with installation with unsupported system");
     }
-    let args = match read_args_from_file() {
-        Some(mut args) => {
-            info!(
-                "{}",
-                "Detected a valid args.json file. Performing a merge of command line args and args.json"
-            );
-            args.merge(Args::parse());
-            args
-        }
-        None => Args::parse(),
-    };
 
     if args.list_versions {
         versions::list_versions().await.unwrap();
@@ -419,3 +452,64 @@ async fn main() {
 
 #[cfg(test)]
 mod parse_tests;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use self_update::update::{Release, ReleaseAsset};
+
+    fn release(version: &str, assets: &[&str]) -> Release {
+        Release {
+            version: version.to_string(),
+            assets: assets
+                .iter()
+                .map(|name| ReleaseAsset {
+                    name: name.to_string(),
+                    download_url: format!("https://example.invalid/{version}/{name}"),
+                })
+                .collect(),
+            ..Release::default()
+        }
+    }
+
+    #[test]
+    fn a_release_without_this_platforms_build_is_skipped() {
+        let current = semver::Version::new(1, 0, 4);
+        let mac_intel = "lodestone_cli_macos_x86_64";
+        // the newest release's Intel Mac build failed (LS-70)
+        let releases = [
+            release("v1.0.6", &["lodestone_cli_macos_aarch64"]),
+            release("v1.0.5", &["lodestone_cli_macos_aarch64", mac_intel]),
+        ];
+        let (version, asset) = cli_update(&releases, mac_intel, &current).unwrap().unwrap();
+        assert_eq!(version, semver::Version::new(1, 0, 5));
+        assert_eq!(asset.name, mac_intel);
+        // up to date
+        let newest = semver::Version::new(1, 0, 5);
+        assert!(cli_update(&releases, mac_intel, &newest).unwrap().is_none());
+        // no build for this platform at all, or no releases: an error, not a panic
+        assert!(cli_update(&releases, "lodestone_cli_windows_aarch64", &current).is_err());
+        assert!(cli_update(&[], mac_intel, &current).is_err());
+    }
+
+    #[test]
+    fn skip_update_check_skips_the_cli_update_too() {
+        let parse = |words: &[&str]| {
+            Args::try_parse_from(std::iter::once("lodestone_cli").chain(words.iter().copied()))
+                .unwrap()
+        };
+        assert!(should_self_update(&parse(&[])));
+        assert!(should_self_update(&parse(&["--run-core"])));
+        // LS-71
+        assert!(!should_self_update(&parse(&[
+            "--skip-update-check",
+            "--run-core"
+        ])));
+        assert!(!should_self_update(&parse(&["--list-versions"])));
+        assert!(!should_self_update(&parse(&["--uninstall"])));
+        // from args.json too
+        let mut args = parse(&["--run-core"]);
+        args.merge(serde_json::from_str(r#"{"skip_update_check": true}"#).unwrap());
+        assert!(!should_self_update(&args));
+    }
+}

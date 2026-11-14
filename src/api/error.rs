@@ -44,6 +44,9 @@ pub mod kind {
     pub const CONFLICT: &str = "Conflict";
     pub const UNSUPPORTED: &str = "UnsupportedOperation";
     pub const BAD_REQUEST: &str = "BadRequest";
+    /// Nothing reads stdout any more (`... --follow | head -n 1`). Never printed: the
+    /// command ends quietly and successfully, like other command line tools.
+    pub const STDOUT_CLOSED: &str = "StdoutClosed";
 }
 
 impl CliError {
@@ -66,6 +69,16 @@ impl CliError {
 
     pub fn io(context: impl fmt::Display, e: std::io::Error) -> Self {
         Self::new(kind::IO, format!("{context}: {e}"))
+    }
+
+    /// The error for a failed write to stdout. A closed pipe gets its own kind, so a
+    /// stream ends quietly when its reader goes away instead of running forever.
+    pub fn output(e: std::io::Error) -> Self {
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            Self::new(kind::STDOUT_CLOSED, "Nothing reads the output any more")
+        } else {
+            Self::io("Failed to write the output", e)
+        }
     }
 
     pub fn not_found(message: impl Into<String>) -> Self {
@@ -179,6 +192,14 @@ mod tests {
             e.to_json(),
             serde_json::json!({"error": {"kind": "NotFound", "message": "No server named x"}})
         );
+    }
+
+    #[test]
+    fn a_closed_stdout_has_its_own_kind() {
+        let closed = std::io::Error::from(std::io::ErrorKind::BrokenPipe);
+        assert_eq!(CliError::output(closed).kind, kind::STDOUT_CLOSED);
+        let full = std::io::Error::other("disk full");
+        assert_eq!(CliError::output(full).kind, kind::IO);
     }
 
     #[test]
