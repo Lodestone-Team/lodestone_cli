@@ -70,11 +70,11 @@ async fn build_filter(conn: &Connection, args: &EventsArgs) -> CliResult<EventFi
     Ok(filter)
 }
 
-fn print_event(ctx: &Ctx, event: &Value) {
+fn print_event(ctx: &Ctx, event: &Value) -> CliResult<()> {
     if ctx.out.json {
-        ctx.out.json_line(event);
+        ctx.out.json_line(event)
     } else {
-        println!("{}", events::format_event_line(event));
+        ctx.out.line(events::format_event_line(event))
     }
 }
 
@@ -149,7 +149,7 @@ pub async fn events(ctx: &Ctx, args: EventsArgs) -> CliResult<()> {
         for event in recent {
             if snowflake(&event) > last {
                 last = snowflake(&event);
-                print_event(ctx, &event);
+                print_event(ctx, &event)?;
             }
         }
         loop {
@@ -161,7 +161,7 @@ pub async fn events(ctx: &Ctx, args: EventsArgs) -> CliResult<()> {
                         continue;
                     }
                     last = snowflake(&event);
-                    print_event(ctx, &event);
+                    print_event(ctx, &event)?;
                 }
                 Next::Closed(reason) => {
                     ctx.out.note(format!(

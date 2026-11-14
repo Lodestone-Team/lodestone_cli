@@ -146,6 +146,8 @@ pub async fn run(global: GlobalOpts, command: Command) -> i32 {
     };
     match cmd::dispatch(&ctx, command).await {
         Ok(()) => ExitCode::Success as i32,
+        // the reader of the output went away (`... | head`): nothing to report
+        Err(e) if e.kind == kind::STDOUT_CLOSED => ExitCode::Success as i32,
         Err(e) => {
             let e = with_credential_hint(e, ctx.credential.get());
             ctx.out.error(&e);

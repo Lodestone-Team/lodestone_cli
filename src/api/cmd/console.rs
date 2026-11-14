@@ -60,20 +60,23 @@ struct Printer<'a> {
 }
 
 impl Printer<'_> {
-    /// Prints a console event once. Returns its text.
-    fn print(&mut self, event: &Value) -> Option<String> {
+    /// Prints a console event once. Returns its text, or `None` for an event already
+    /// printed or not a console line.
+    fn print(&mut self, event: &Value) -> CliResult<Option<String>> {
         let id = snowflake(event);
         if id != 0 && id <= self.last {
-            return None;
+            return Ok(None);
         }
-        let line = console_line(event)?;
+        let Some(line) = console_line(event) else {
+            return Ok(None);
+        };
         self.last = self.last.max(id);
         if self.ctx.out.json {
-            self.ctx.out.json_line(event);
+            self.ctx.out.json_line(event)?;
         } else {
-            println!("{line}");
+            self.ctx.out.line(&line)?;
         }
-        Some(line)
+        Ok(Some(line))
     }
 }
 
@@ -150,7 +153,7 @@ async fn show_console(ctx: &Ctx, args: ConsoleShowArgs) -> CliResult<()> {
         };
         for event in &recent {
             // old lines never end the wait: they may be from an earlier run
-            printer.print(event);
+            printer.print(event)?;
         }
         first = false;
         loop {
@@ -163,7 +166,7 @@ async fn show_console(ctx: &Ctx, args: ConsoleShowArgs) -> CliResult<()> {
             };
             match next {
                 Next::Json(event) => {
-                    if let Some(line) = printer.print(&event) {
+                    if let Some(line) = printer.print(&event)? {
                         if args
                             .until
                             .as_ref()
@@ -253,7 +256,7 @@ pub async fn players(ctx: &Ctx, args: PlayersArgs) -> CliResult<()> {
     Ok(())
 }
 
-fn print_report(report: &Value) {
+fn report_line(report: &Value) -> String {
     let cpu = report["cpu_usage"]
         .as_f64()
         .map(|c| format!("{c:.1}%"))
@@ -266,7 +269,7 @@ fn print_report(report: &Value) {
         .as_i64()
         .map(|start| format_duration((chrono::Utc::now().timestamp() - start).max(0) as u64))
         .unwrap_or_else(|| "-".into());
-    println!("CPU {cpu:>7}   Memory {memory:>10}   Uptime {uptime}");
+    format!("CPU {cpu:>7}   Memory {memory:>10}   Uptime {uptime}")
 }
 
 pub async fn monitor(ctx: &Ctx, args: MonitorArgs) -> CliResult<()> {
@@ -307,7 +310,8 @@ pub async fn monitor(ctx: &Ctx, args: MonitorArgs) -> CliResult<()> {
             }
             let report = latest
                 .ok_or_else(|| CliError::new(kind::NETWORK, "The core sent no monitor report"))?;
-            ctx.out.show(&report, || print_report(&report));
+            ctx.out
+                .show(&report, || println!("{}", report_line(&report)));
             return Ok(());
         }
         first = false;
@@ -315,9 +319,9 @@ pub async fn monitor(ctx: &Ctx, args: MonitorArgs) -> CliResult<()> {
             match ws::next_json(&mut socket).await {
                 Next::Json(report) => {
                     if ctx.out.json {
-                        ctx.out.json_line(&report);
+                        ctx.out.json_line(&report)?;
                     } else {
-                        print_report(&report);
+                        ctx.out.line(report_line(&report))?;
                     }
                 }
                 Next::Closed(_) => {

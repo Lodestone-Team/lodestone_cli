@@ -107,9 +107,9 @@ async fn watch(ctx: &Ctx, args: TraceWatchArgs) -> CliResult<()> {
                         let event = &message["event"];
                         since = event["seq"].as_u64().or(since);
                         if ctx.out.json {
-                            ctx.out.json_line(event);
+                            ctx.out.json_line(event)?;
                         } else {
-                            println!("{}", trace_line(event));
+                            ctx.out.line(trace_line(event))?;
                         }
                         seen += 1;
                         if args.count.is_some_and(|count| seen >= count) {

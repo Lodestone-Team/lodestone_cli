@@ -724,6 +724,37 @@ fn console_event(message: &str, snowflake: u64) -> Value {
 }
 
 #[test]
+fn streams_end_quietly_when_stdout_closes() {
+    // `lodestone_cli --json monitor survival --follow | head -n 1` (LS-74): once the reader
+    // is gone the stream must end, not reconnect forever (JSON) or panic (text)
+    let server = MockServer::start(|req| match req.path.as_str() {
+        "/api/v1/instance/list" => Reply::ok(instance_list()),
+        p if p.starts_with("/api/v1/monitor/") => Reply::WebSocket(vec![
+            json!({"cpu_usage": 1.0, "memory_usage": 1024, "disk_usage": null, "start_time": null}),
+            json!({"cpu_usage": 2.0, "memory_usage": 2048, "disk_usage": null, "start_time": null}),
+        ]),
+        p if p.ends_with("/console/buffer") => Reply::ok(json!([console_event("Loading", 1)])),
+        p if p.ends_with("/console/stream") => {
+            Reply::WebSocket(vec![console_event("Done", 2), console_event("after", 3)])
+        }
+        _ => Reply::error(404, "NotFound", "Not found"),
+    });
+    let cli = Cli::with_env(&server);
+    for args in [
+        &["monitor", "survival", "--follow", "--json"][..],
+        &["monitor", "survival", "--follow"],
+        &["console", "survival", "--follow", "--json"],
+        &["console", "survival", "--follow"],
+    ] {
+        let (code, stderr) = cli
+            .run_with_closed_stdout(args, std::time::Duration::from_secs(30))
+            .unwrap_or_else(|| panic!("{args:?} kept running after stdout closed"));
+        assert_eq!(code, 0, "{args:?}: {stderr}");
+        assert!(!stderr.contains("panicked"), "{args:?}: {stderr}");
+    }
+}
+
+#[test]
 fn console_follows_until_a_line_appears() {
     let server = MockServer::start(|req| match req.path.as_str() {
         "/api/v1/instance/list" => Reply::ok(instance_list()),

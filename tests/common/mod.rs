@@ -435,6 +435,51 @@ impl Cli {
     }
 
     pub fn run_with_stdin(&self, args: &[&str], stdin: &str) -> Run {
+        let mut child = self.command(args).spawn().unwrap();
+        let mut input = child.stdin.take().unwrap();
+        let _ = input.write_all(stdin.as_bytes());
+        drop(input);
+        let (code, stdout, stderr) = wait_with_timeout(child);
+        Run {
+            code,
+            stdout: String::from_utf8_lossy(&stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+        }
+    }
+
+    /// Runs the CLI with a stdout whose reader is already gone, as in `... | head -n 0`.
+    /// Returns the exit code and stderr, or `None` if it still runs after `timeout`
+    /// (it is killed then).
+    pub fn run_with_closed_stdout(
+        &self,
+        args: &[&str],
+        timeout: std::time::Duration,
+    ) -> Option<(i32, String)> {
+        let mut child = self.command(args).spawn().unwrap();
+        drop(child.stdin.take());
+        drop(child.stdout.take());
+        let stderr = child.stderr.take().unwrap();
+        let stderr = std::thread::spawn(move || {
+            let mut out = String::new();
+            let _ = BufReader::new(stderr).read_to_string(&mut out);
+            out
+        });
+        let deadline = std::time::Instant::now() + timeout;
+        let status = loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                break status;
+            }
+            if std::time::Instant::now() > deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        Some((status.code().unwrap_or(-1), stderr.join().unwrap()))
+    }
+
+    fn command(&self, args: &[&str]) -> Command {
         let mut command = Command::new(env!("CARGO_BIN_EXE_lodestone_cli"));
         command
             .args(args)
@@ -459,16 +504,7 @@ impl Cli {
         for (k, v) in &self.env {
             command.env(k, v);
         }
-        let mut child = command.spawn().unwrap();
-        let mut input = child.stdin.take().unwrap();
-        let _ = input.write_all(stdin.as_bytes());
-        drop(input);
-        let (code, stdout, stderr) = wait_with_timeout(child);
-        Run {
-            code,
-            stdout: String::from_utf8_lossy(&stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&stderr).into_owned(),
-        }
+        command
     }
 
     pub fn profiles_path(&self) -> PathBuf {

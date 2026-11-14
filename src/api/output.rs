@@ -5,7 +5,7 @@ use std::io::Write;
 
 use serde_json::Value;
 
-use super::error::CliError;
+use super::error::{CliError, CliResult};
 use super::keys::redact;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -21,12 +21,25 @@ impl Output {
         let _ = writeln!(stdout);
     }
 
-    /// Prints one line of NDJSON on stdout and flushes it, for streams.
-    pub fn json_line(&self, value: &Value) {
+    /// Prints one line of NDJSON on stdout and flushes it, for streams. Fails once nothing
+    /// reads stdout any more (kind `StdoutClosed`), so the stream can stop: the process
+    /// ignores SIGPIPE, as Rust programs do, and would otherwise keep streaming forever.
+    pub fn json_line(&self, value: &Value) -> CliResult<()> {
         let mut stdout = std::io::stdout().lock();
-        let _ = serde_json::to_writer(&mut stdout, value);
-        let _ = writeln!(stdout);
-        let _ = stdout.flush();
+        serde_json::to_writer(&mut stdout, value)
+            .map_err(std::io::Error::from)
+            .and_then(|()| writeln!(stdout))
+            .and_then(|()| stdout.flush())
+            .map_err(CliError::output)
+    }
+
+    /// Prints one line of text on stdout and flushes it, for streams. Like `json_line`, it
+    /// fails once nothing reads stdout, where `println!` would panic.
+    pub fn line(&self, text: impl std::fmt::Display) -> CliResult<()> {
+        let mut stdout = std::io::stdout().lock();
+        writeln!(stdout, "{text}")
+            .and_then(|()| stdout.flush())
+            .map_err(CliError::output)
     }
 
     /// For commands that change something and have nothing else to show: `{"ok": true}`
